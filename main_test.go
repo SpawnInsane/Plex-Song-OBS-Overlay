@@ -126,3 +126,27 @@ func TestSettingsRejectCrossOriginWrite(t *testing.T) {
 		t.Fatalf("cross-origin status = %d", response.StatusCode)
 	}
 }
+
+func TestMigrateLegacySettings(t *testing.T) {
+	directory := t.TempDir()
+	legacyPath := filepath.Join(directory, legacyProductName, "config.json")
+	currentPath := filepath.Join(directory, productName, "config.json")
+	legacy, err := newSettingsStore(legacyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := savedSettings{PlexURL: "http://plex.local:32400", PlexToken: "secret", PlexUser: "Sara", PollIntervalSeconds: 3}
+	if err := legacy.save(want); err != nil {
+		t.Fatal(err)
+	}
+	current, err := newSettingsStore(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacySettings(current, legacyPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := current.snapshot(); got != want {
+		t.Fatalf("migrated settings = %+v, want %+v", got, want)
+	}
+}

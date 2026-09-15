@@ -1,7 +1,7 @@
 # Repository instructions
 
 - Whenever you make changes to this repository, append concise, user-facing release notes to `body.md`.
-- Keep `README.md` focused on the Plex Song Grabber program: installation, configuration, user-visible behavior, and operator guidance. Do not document repository, CI, release, or contributor automation there.
+- Keep `README.md` focused on the Plex Song OBS Overlay program: installation, configuration, user-visible behavior, and operator guidance. Do not document repository, CI, release, or contributor automation there.
 - Update `SECURITY.md` whenever changes affect security boundaries, local credential storage, network exposure, or workflow security.
 - Create development branches from `develop` and merge completed work back into `develop`. Accumulate changes there, then merge `develop` into `main` only when the application is ready for a stable release.
 - Use Conventional Commit subjects. Use `fix:` for patch-impact changes and `feat:` for minor-impact changes. Use `feat!:` with a `BREAKING CHANGE:` footer only for genuine breaking changes.

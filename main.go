@@ -23,6 +23,11 @@ import (
 
 const listenAddr = "127.0.0.1:7070"
 
+const (
+	productName       = "Plex Song OBS Overlay"
+	legacyProductName = "Plex Song Grabber"
+)
+
 //go:embed web/*
 var webFiles embed.FS
 
@@ -103,11 +108,15 @@ func applicationVersion() string {
 }
 
 func configFilePath() (string, error) {
+	return namedConfigFilePath(productName)
+}
+
+func namedConfigFilePath(name string) (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("find user configuration directory: %w", err)
 	}
-	return filepath.Join(dir, "Plex Song Grabber", "config.json"), nil
+	return filepath.Join(dir, name, "config.json"), nil
 }
 
 func newSettingsStore(path string) (*settingsStore, error) {
@@ -151,6 +160,27 @@ func (s *settingsStore) save(next savedSettings) error {
 	return nil
 }
 
+func migrateLegacySettings(current *settingsStore, legacyPath string) error {
+	if _, err := os.Stat(current.path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check current settings: %w", err)
+	}
+	if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("check legacy settings: %w", err)
+	}
+	legacy, err := newSettingsStore(legacyPath)
+	if err != nil {
+		return fmt.Errorf("read legacy settings: %w", err)
+	}
+	if err := current.save(legacy.snapshot()); err != nil {
+		return fmt.Errorf("migrate legacy settings: %w", err)
+	}
+	return nil
+}
+
 func validateSettings(settings savedSettings) (*url.URL, error) {
 	base, err := url.Parse(strings.TrimSpace(settings.PlexURL))
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
@@ -185,8 +215,8 @@ func (p *plexClient) request(ctx context.Context, path string) (*http.Response, 
 	}
 	req.Header.Set("Accept", "application/xml")
 	req.Header.Set("X-Plex-Token", p.token)
-	req.Header.Set("X-Plex-Product", "Plex Song Grabber")
-	req.Header.Set("X-Plex-Client-Identifier", "plex-song-grabber-overlay")
+	req.Header.Set("X-Plex-Product", productName)
+	req.Header.Set("X-Plex-Client-Identifier", "plex-song-obs-overlay")
 	return p.client.Do(req)
 }
 
@@ -232,6 +262,15 @@ func main() {
 		slog.Error("configuration error", "error", err)
 		return
 	}
+	legacyPath, err := namedConfigFilePath(legacyProductName)
+	if err != nil {
+		slog.Error("legacy configuration path error", "error", err)
+		return
+	}
+	if err := migrateLegacySettings(store, legacyPath); err != nil {
+		slog.Error("configuration migration error", "error", err)
+		return
+	}
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
@@ -251,7 +290,7 @@ func main() {
 	go func() { serverErrors <- server.Serve(listener) }()
 
 	_ = openBrowser("http://" + listenAddr + "/")
-	slog.Info("Plex Song Grabber is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
+	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
 
 	select {
 	case <-shutdown:

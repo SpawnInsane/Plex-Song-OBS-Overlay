@@ -22,7 +22,7 @@ fi
 
 if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
   if printf '%s\n' "$staged_files" | grep -Eq '^(main\.go|web/)'; then
-    printf '%s\n' 'feat: add Plex song OBS overlay' > "$message_file"
+    printf '%s\n' 'feat: add Plex Song OBS Overlay' > "$message_file"
   else
     printf '%s\n' 'chore: initialize repository' > "$message_file"
   fi
@@ -44,9 +44,9 @@ if printf '%s\n' "$staged_files" | grep -Eq '^\.github/workflows/'; then has_wor
 if printf '%s\n' "$staged_files" | grep -Eq '^(go\.(mod|sum)|renovate\.json)$'; then has_dependencies=true; fi
 
 if $has_runtime && $has_new_runtime; then
-  message='feat: extend Plex song grabber'
+  message='feat: extend Plex Song OBS Overlay'
 elif $has_runtime; then
-  message='fix: update Plex song grabber'
+  message='fix: update Plex Song OBS Overlay'
 elif $has_workflows; then
   message='chore(ci): update GitHub automation'
 elif $has_dependencies; then
