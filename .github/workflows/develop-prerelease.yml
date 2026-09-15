@@ -111,13 +111,14 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
+      - name: Run tests
+        run: go test ./...
       - name: Build release artifact
         env:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: 0
         run: |
-          go test ./...
           mkdir dist
           go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/PlexSongGrabber.exe .
           sha256sum dist/PlexSongGrabber.exe > dist/PlexSongGrabber.exe.sha256
