@@ -1,0 +1,55 @@
+name: Sync release version
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-release-version-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync-version:
+    if: github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Calculate next stable version
+        id: version
+        run: node .github/scripts/calculate-release-version.cjs --channel=stable
+      - name: Check out develop
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: git checkout -B "$HEAD_BRANCH" "origin/$HEAD_BRANCH"
+      - name: Update version metadata
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.new_tag }}
+        run: node -e 'const fs=require("fs"); fs.writeFileSync("version.json", JSON.stringify({version:process.env.NEXT_TAG}, null, 2)+"\n");'
+      - name: Commit version metadata
+        id: commit
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.new_tag }}
+        run: |
+          if git diff --quiet -- version.json; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "chore: prepare ${NEXT_TAG} release"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Push version metadata
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_SYNC_TOKEN }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Configure RELEASE_SYNC_TOKEN with Contents read/write access."; exit 1; fi
+          gh auth setup-git
+          git push origin "HEAD:$HEAD_BRANCH"

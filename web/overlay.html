@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plex Now Playing</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="card" class="card hidden" aria-live="polite">
+    <img id="artwork" class="artwork" alt="" width="112" height="112">
+    <section class="details">
+      <div class="eyebrow"><span id="indicator"></span><span id="state">NOW PLAYING</span></div>
+      <div id="title" class="title"></div>
+      <div id="artist" class="artist"></div>
+      <div id="album" class="album"></div>
+      <div class="progress"><div id="progress-bar"></div></div>
+    </section>
+  </main>
+  <script src="overlay.js"></script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plex Song Grabber Setup</title>
+  <link rel="stylesheet" href="setup.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="logo">▶</div>
+      <div>
+        <p class="eyebrow">TWITCH OVERLAY</p>
+        <h1>Plex Song Grabber</h1>
+        <p class="intro">Connect Plex once, then use the overlay URL in OBS.</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <form id="settings-form">
+        <label for="plex-url">Plex server URL</label>
+        <input id="plex-url" name="plexUrl" type="url" placeholder="http://192.168.1.100:32400" required spellcheck="false">
+        <p class="hint">Usually your Plex computer's local IP address followed by port 32400.</p>
+
+        <label for="plex-token">Plex token</label>
+        <div class="token-row">
+          <input id="plex-token" name="plexToken" type="password" placeholder="Enter your Plex token" autocomplete="off">
+          <button id="show-token" class="secondary small" type="button">Show</button>
+        </div>
+        <p id="token-hint" class="hint">The token is stored only on this computer. <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noreferrer">How to find it</a></p>
+
+        <div class="two-column">
+          <div>
+            <label for="plex-user">Plex username</label>
+            <input id="plex-user" name="plexUser" type="text" placeholder="Leave blank for any user">
+          </div>
+          <div>
+            <label for="poll-interval">Refresh every</label>
+            <select id="poll-interval" name="pollIntervalSeconds">
+              <option value="1">1 second</option>
+              <option value="3">3 seconds</option>
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="save" type="submit">Save settings</button>
+          <button id="test" class="secondary" type="button">Test connection</button>
+        </div>
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="panel overlay-panel">
+      <div>
+        <p class="eyebrow">OBS BROWSER SOURCE</p>
+        <code id="overlay-url">http://127.0.0.1:7070/web/overlay.html</code>
+      </div>
+      <div class="actions compact">
+        <button id="copy-url" class="secondary" type="button">Copy URL</button>
+        <a class="button secondary" href="/web/overlay.html" target="_blank">Preview</a>
+      </div>
+    </section>
+
+    <footer>
+      <span><span id="app-version"></span> · <span id="save-location"></span></span>
+      <button id="stop-server" class="text-button" type="button">Stop application</button>
+    </footer>
+  </main>
+  <script src="setup.js"></script>
+</body>
+</html>

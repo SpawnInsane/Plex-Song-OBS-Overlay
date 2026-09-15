@@ -1,0 +1,454 @@
+package main
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+)
+
+const listenAddr = "127.0.0.1:7070"
+
+//go:embed web/*
+var webFiles embed.FS
+
+//go:embed version.json
+var versionData []byte
+
+type savedSettings struct {
+	PlexURL             string `json:"plexUrl"`
+	PlexToken           string `json:"plexToken"`
+	PlexUser            string `json:"plexUser"`
+	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
+}
+
+type settingsStore struct {
+	mu       sync.RWMutex
+	path     string
+	settings savedSettings
+}
+
+type plexClient struct {
+	base   *url.URL
+	token  string
+	client *http.Client
+}
+
+type mediaContainer struct {
+	Tracks []track `xml:"Track"`
+}
+
+type track struct {
+	Type        string   `xml:"type,attr"`
+	Title       string   `xml:"title,attr"`
+	Grandparent string   `xml:"grandparentTitle,attr"`
+	Parent      string   `xml:"parentTitle,attr"`
+	Thumb       string   `xml:"thumb,attr"`
+	Duration    int64    `xml:"duration,attr"`
+	ViewOffset  int64    `xml:"viewOffset,attr"`
+	User        plexUser `xml:"User"`
+	Player      player   `xml:"Player"`
+}
+
+type plexUser struct {
+	Title string `xml:"title,attr"`
+}
+
+type player struct {
+	State string `xml:"state,attr"`
+}
+
+type nowPlaying struct {
+	Playing    bool   `json:"playing"`
+	Paused     bool   `json:"paused"`
+	Title      string `json:"title,omitempty"`
+	Artist     string `json:"artist,omitempty"`
+	Album      string `json:"album,omitempty"`
+	PositionMS int64  `json:"positionMs,omitempty"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+	ArtworkURL string `json:"artworkUrl,omitempty"`
+}
+
+type publicSettings struct {
+	PlexURL             string `json:"plexUrl"`
+	PlexUser            string `json:"plexUser"`
+	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
+	TokenConfigured     bool   `json:"tokenConfigured"`
+	ConfigPath          string `json:"configPath"`
+	Version             string `json:"version"`
+}
+
+func applicationVersion() string {
+	var metadata struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(versionData, &metadata) != nil || metadata.Version == "" {
+		return "development"
+	}
+	return metadata.Version
+}
+
+func configFilePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("find user configuration directory: %w", err)
+	}
+	return filepath.Join(dir, "Plex Song Grabber", "config.json"), nil
+}
+
+func newSettingsStore(path string) (*settingsStore, error) {
+	store := &settingsStore{path: path, settings: savedSettings{PollIntervalSeconds: 3}}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return store, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read settings: %w", err)
+	}
+	if err := json.Unmarshal(data, &store.settings); err != nil {
+		return nil, fmt.Errorf("read settings: %w", err)
+	}
+	if store.settings.PollIntervalSeconds == 0 {
+		store.settings.PollIntervalSeconds = 3
+	}
+	return store, nil
+}
+
+func (s *settingsStore) snapshot() savedSettings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settings
+}
+
+func (s *settingsStore) save(next savedSettings) error {
+	data, err := json.MarshalIndent(next, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+		return fmt.Errorf("create settings directory: %w", err)
+	}
+	if err := os.WriteFile(s.path, data, 0600); err != nil {
+		return fmt.Errorf("write settings: %w", err)
+	}
+	s.mu.Lock()
+	s.settings = next
+	s.mu.Unlock()
+	return nil
+}
+
+func validateSettings(settings savedSettings) (*url.URL, error) {
+	base, err := url.Parse(strings.TrimSpace(settings.PlexURL))
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
+		return nil, errors.New("enter a valid Plex URL beginning with http:// or https://")
+	}
+	if strings.TrimSpace(settings.PlexToken) == "" {
+		return nil, errors.New("enter a Plex token")
+	}
+	if settings.PollIntervalSeconds < 1 || settings.PollIntervalSeconds > 60 {
+		return nil, errors.New("refresh interval must be between 1 and 60 seconds")
+	}
+	base.Path = strings.TrimRight(base.Path, "/")
+	base.RawQuery = ""
+	base.Fragment = ""
+	return base, nil
+}
+
+func clientFromSettings(settings savedSettings) (*plexClient, error) {
+	base, err := validateSettings(settings)
+	if err != nil {
+		return nil, err
+	}
+	return &plexClient{base: base, token: settings.PlexToken, client: &http.Client{Timeout: 8 * time.Second}}, nil
+}
+
+func (p *plexClient) request(ctx context.Context, path string) (*http.Response, error) {
+	u := *p.base
+	u.Path = strings.TrimRight(p.base.Path, "/") + "/" + strings.TrimLeft(path, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/xml")
+	req.Header.Set("X-Plex-Token", p.token)
+	req.Header.Set("X-Plex-Product", "Plex Song Grabber")
+	req.Header.Set("X-Plex-Client-Identifier", "plex-song-grabber-overlay")
+	return p.client.Do(req)
+}
+
+func (p *plexClient) sessions(ctx context.Context) (mediaContainer, error) {
+	resp, err := p.request(ctx, "/status/sessions")
+	if err != nil {
+		return mediaContainer{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return mediaContainer{}, fmt.Errorf("Plex returned %s", resp.Status)
+	}
+	var sessions mediaContainer
+	if err := xml.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&sessions); err != nil {
+		return mediaContainer{}, fmt.Errorf("decode Plex response: %w", err)
+	}
+	return sessions, nil
+}
+
+func (p *plexClient) currentTrack(ctx context.Context, username string) (track, bool, error) {
+	sessions, err := p.sessions(ctx)
+	if err != nil {
+		return track{}, false, err
+	}
+	for _, candidate := range sessions.Tracks {
+		userMatches := username == "" || strings.EqualFold(candidate.User.Title, username)
+		if candidate.Type == "track" && userMatches && (candidate.Player.State == "playing" || candidate.Player.State == "paused") {
+			return candidate, true, nil
+		}
+	}
+	return track{}, false, nil
+}
+
+func main() {
+	path, err := configFilePath()
+	if err != nil {
+		slog.Error("configuration error", "error", err)
+		return
+	}
+	store, err := newSettingsStore(path)
+	if err != nil {
+		slog.Error("configuration error", "error", err)
+		return
+	}
+
+	listener, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		if serverAlreadyRunning() {
+			_ = openBrowser("http://" + listenAddr + "/")
+			return
+		}
+		slog.Error("cannot start local server", "error", err)
+		return
+	}
+
+	shutdown := make(chan struct{})
+	var shutdownOnce sync.Once
+	mux := routes(store, func() { shutdownOnce.Do(func() { close(shutdown) }) })
+	server := &http.Server{Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.Serve(listener) }()
+
+	_ = openBrowser("http://" + listenAddr + "/")
+	slog.Info("Plex Song Grabber is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
+
+	select {
+	case <-shutdown:
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server stopped", "error", err)
+		}
+	}
+}
+
+func routes(store *settingsStore, stop func()) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/web/setup.html", http.StatusTemporaryRedirect)
+	})
+	mux.Handle("GET /web/", noCache(http.FileServer(http.FS(webFiles))))
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, _ *http.Request) {
+		current := store.snapshot()
+		writeJSON(w, http.StatusOK, publicSettings{
+			PlexURL: current.PlexURL, PlexUser: current.PlexUser,
+			PollIntervalSeconds: current.PollIntervalSeconds,
+			TokenConfigured:     strings.TrimSpace(current.PlexToken) != "", ConfigPath: store.path,
+			Version: applicationVersion(),
+		})
+	})
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+			return
+		}
+		var input savedSettings
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid settings"})
+			return
+		}
+		input.PlexURL = strings.TrimSpace(input.PlexURL)
+		input.PlexUser = strings.TrimSpace(input.PlexUser)
+		input.PlexToken = strings.TrimSpace(input.PlexToken)
+		if input.PlexToken == "" {
+			input.PlexToken = store.snapshot().PlexToken
+		}
+		if _, err := validateSettings(input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := store.save(input); err != nil {
+			slog.Error("save settings", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not save settings"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"saved": true})
+	})
+	mux.HandleFunc("POST /api/test-connection", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+			return
+		}
+		client, err := clientFromSettings(store.snapshot())
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second)
+		defer cancel()
+		if _, err := client.sessions(ctx); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "connection failed: " + err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"connected": true})
+	})
+	mux.HandleFunc("GET /api/now-playing", func(w http.ResponseWriter, r *http.Request) {
+		settings := store.snapshot()
+		client, err := clientFromSettings(settings)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "setup is incomplete"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second)
+		defer cancel()
+		current, found, err := client.currentTrack(ctx, settings.PlexUser)
+		if err != nil {
+			slog.Warn("Plex request failed", "error", err)
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Plex is unavailable"})
+			return
+		}
+		if !found {
+			writeJSON(w, http.StatusOK, nowPlaying{})
+			return
+		}
+		result := nowPlaying{Playing: current.Player.State == "playing", Paused: current.Player.State == "paused", Title: current.Title, Artist: current.Grandparent, Album: current.Parent, PositionMS: current.ViewOffset, DurationMS: current.Duration}
+		if current.Thumb != "" {
+			result.ArtworkURL = "/api/artwork?path=" + url.QueryEscape(current.Thumb)
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, _ *http.Request) {
+		seconds := store.snapshot().PollIntervalSeconds
+		if seconds < 1 || seconds > 60 {
+			seconds = 3
+		}
+		writeJSON(w, http.StatusOK, map[string]int{"pollIntervalMs": seconds * 1000})
+	})
+	mux.HandleFunc("GET /api/artwork", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Query().Get("path")
+		if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "\\") {
+			http.Error(w, "invalid artwork path", http.StatusBadRequest)
+			return
+		}
+		client, err := clientFromSettings(store.snapshot())
+		if err != nil {
+			http.Error(w, "setup is incomplete", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second)
+		defer cancel()
+		resp, err := client.request(ctx, path)
+		if err != nil {
+			http.Error(w, "artwork unavailable", http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/") {
+			http.Error(w, "artwork unavailable", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.Header().Set("Cache-Control", "private, max-age=300")
+		_, _ = io.Copy(w, io.LimitReader(resp.Body, 10<<20))
+	})
+	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"stopping": true})
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			stop()
+		}()
+	})
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	return mux
+}
+
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	return origin == "" || origin == "http://"+r.Host || origin == "https://"+r.Host
+}
+
+func serverAlreadyRunning() bool {
+	client := &http.Client{Timeout: time.Second}
+	resp, err := client.Get("http://" + listenAddr + "/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func openBrowser(address string) error {
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", address)
+	case "darwin":
+		command = exec.Command("open", address)
+	default:
+		command = exec.Command("xdg-open", address)
+	}
+	return command.Start()
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'")
+		next.ServeHTTP(w, r)
+	})
+}

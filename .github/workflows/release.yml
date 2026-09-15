@@ -1,0 +1,101 @@
+name: Stable release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  calculate:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.version.outputs.new_tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test version calculation
+        run: node .github/scripts/calculate-release-version.test.cjs
+      - name: Calculate stable version
+        id: version
+        run: node .github/scripts/calculate-release-version.cjs --channel=stable
+      - name: Verify checked-in version
+        env:
+          EXPECTED_TAG: ${{ steps.version.outputs.new_tag }}
+        run: |
+          FILE_TAG="$(node -p 'require("./version.json").version')"
+          if [ "$FILE_TAG" != "$EXPECTED_TAG" ]; then echo "::error::version.json contains ${FILE_TAG}; expected ${EXPECTED_TAG}."; exit 1; fi
+
+  release:
+    needs: calculate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out released revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - name: Build release artifact
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go test ./...
+          mkdir dist
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/PlexSongGrabber.exe .
+          sha256sum dist/PlexSongGrabber.exe > dist/PlexSongGrabber.exe.sha256
+      - name: Create GitHub release
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
+        with:
+          tag: ${{ needs.calculate.outputs.new_tag }}
+          commit: ${{ github.sha }}
+          name: Release ${{ needs.calculate.outputs.new_tag }}
+          bodyFile: body.md
+          generateReleaseNotes: true
+          generateReleaseNotesPreviousTag: ${{ needs.calculate.outputs.previous_tag }}
+          artifacts: dist/*
+          makeLatest: true
+
+  reset-release-notes:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out released revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reset unchanged develop release notes
+        id: reset
+        run: |
+          if ! git fetch origin develop:refs/remotes/origin/develop; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git show origin/develop:body.md > "$RUNNER_TEMP/develop-body.md"
+          if ! cmp -s body.md "$RUNNER_TEMP/develop-body.md"; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git checkout -B develop origin/develop
+          printf '# Release notes\n' > body.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add body.md
+          git commit -m "chore: start next release notes"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Push reset release notes
+        if: steps.reset.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_SYNC_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Configure RELEASE_SYNC_TOKEN with Contents read/write access."; exit 1; fi
+          gh auth setup-git
+          git push origin HEAD:develop

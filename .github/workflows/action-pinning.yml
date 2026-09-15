@@ -1,0 +1,24 @@
+name: Action pinning
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Reject mutable action references
+        shell: bash
+        run: |
+          shopt -s nullglob
+          bash .github/scripts/test-action-pins.sh
+          workflows=(.github/workflows/*.yml .github/workflows/*.yaml)
+          awk -f .github/scripts/check-action-pins.awk "${workflows[@]}"
+      - name: Test release version calculation
+        run: node .github/scripts/calculate-release-version.test.cjs
