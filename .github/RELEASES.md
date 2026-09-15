@@ -12,12 +12,10 @@ Each release contains the console-free Windows executable and a SHA-256 checksum
 
 ## Required repository setup
 
-1. Create the initial `main` commit with the subject `feat: add Plex song OBS overlay` so it matches the checked-in `v0.1.0` bootstrap version.
-2. Run `powershell -ExecutionPolicy Bypass -File scripts/setup-git-hooks.ps1` once after each new clone to enable automatic messages for blank commits.
-3. Push `main`, then create and push `develop` from that released revision.
-4. Add a fine-grained personal access token as the Actions secret `RELEASE_SYNC_TOKEN`. Limit it to this repository with **Contents: Read and write** permission.
-5. Protect `main` and `develop`, require pull requests, and require the **Build and test** and **Action pinning** checks.
-6. Enable Renovate for the repository if it is not already installed.
+1. Run `powershell -ExecutionPolicy Bypass -File scripts/setup-git-hooks.ps1` once after each new clone to enable automatic messages for blank commits.
+2. Add a fine-grained personal access token as the Actions secret `RELEASE_SYNC_TOKEN`. Limit it to this repository with **Contents: Read and write** permission.
+3. Protect `main` and `develop`, require pull requests, and require the **Build and test** and **Action pinning** checks.
+4. Enable Renovate for the repository if it is not already installed.
 
 The `RELEASE_SYNC_TOKEN` is used only for version-metadata commits and guarded release-note resets. Release creation uses the workflow-scoped `GITHUB_TOKEN`.
 

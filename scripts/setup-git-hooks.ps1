@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = git rev-parse --show-toplevel
 if (-not $repositoryRoot) {
-    throw "Run this script from inside the Plex Song Grabber repository."
+    throw "Run this script from inside the Plex Song OBS Overlay repository."
 }
 
 git -C $repositoryRoot config --local core.hooksPath .githooks
