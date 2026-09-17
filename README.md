@@ -40,7 +40,7 @@ Plex Song OBS Overlay listens only on `127.0.0.1`, so other computers cannot ope
 
 ## Build from source
 
-Go 1.24 or newer is required.
+Go 1.26 or newer is required.
 
 The Windows application uses the Microsoft Edge WebView2 Runtime for its desktop control window. WebView2 is included with Windows 11 and most current Windows 10 installations. If the application reports that WebView2 is unavailable, install Microsoft's [Evergreen WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/consumer/) and start the application again.
 
