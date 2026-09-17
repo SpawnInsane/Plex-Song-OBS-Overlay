@@ -14,6 +14,7 @@ let anchorDurationMs = 0;
 let anchorTime = performance.now();
 let progressPlaying = false;
 let lastProgressTime = '';
+let lastReportedPositionMs = null;
 
 function trackIdentity(song) {
   return song.trackId || [song.title, song.artist, song.album, song.durationMs, song.artworkUrl].join('\u001f');
@@ -49,6 +50,7 @@ function resetProgress() {
   anchorDurationMs = 0;
   anchorTime = performance.now();
   progressPlaying = false;
+  lastReportedPositionMs = null;
   progress.style.width = '0%';
   renderProgressTime(0, 0);
 }
@@ -59,18 +61,23 @@ function synchronizeProgress(song) {
   const reportedPosition = Math.max(0, Math.min(song.durationMs || 0, song.positionMs || 0));
   const estimated = estimatedPosition(now);
   const trackChanged = currentTrackID !== null && currentTrackID !== nextTrackID;
-  const playbackChanged = progressPlaying !== Boolean(song.playing);
-  const significantSeek = Math.abs(reportedPosition - estimated) > 1500;
+  const playing = Boolean(song.playing);
+  const synchronized = PlaybackClock.synchronizePosition({
+    hasCurrentTrack: currentTrackID !== null,
+    trackChanged,
+    wasPlaying: progressPlaying,
+    playing,
+    estimatedPositionMs: estimated,
+    reportedPositionMs: reportedPosition,
+    previousReportedPositionMs: lastReportedPositionMs,
+  });
 
-  if (currentTrackID === null || trackChanged || playbackChanged || significantSeek) {
-    anchorPositionMs = reportedPosition;
-  } else {
-    anchorPositionMs = estimated + (reportedPosition - estimated) * 0.25;
-  }
+  anchorPositionMs = synchronized.positionMs;
   currentTrackID = nextTrackID;
   anchorDurationMs = Math.max(0, song.durationMs || 0);
   anchorTime = now;
-  progressPlaying = Boolean(song.playing);
+  progressPlaying = playing;
+  lastReportedPositionMs = reportedPosition;
 }
 
 function animateProgress(now) {

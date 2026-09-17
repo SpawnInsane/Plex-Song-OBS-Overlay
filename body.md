@@ -8,3 +8,4 @@
 - Added a new project logo and matching Windows executable, application-window, and taskbar icon.
 - Fixed release automation so its version and release-note commits satisfy signed-commit protection.
 - Corrected the source-build guide to require the Go version declared by the project.
+- Prevented the playback timer and progress bar from jumping backward when Plex reports a slightly stale position.
