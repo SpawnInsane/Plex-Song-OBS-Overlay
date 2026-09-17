@@ -11,6 +11,7 @@ jobs:
   calculate:
     runs-on: ubuntu-latest
     outputs:
+      publish: ${{ steps.version.outputs.publish }}
       new_tag: ${{ steps.version.outputs.new_tag }}
       previous_tag: ${{ steps.version.outputs.previous_tag }}
     steps:
@@ -25,6 +26,7 @@ jobs:
         id: version
         run: node .github/scripts/calculate-release-version.cjs --channel=stable
       - name: Verify checked-in version
+        if: steps.version.outputs.publish == 'true'
         env:
           EXPECTED_TAG: ${{ steps.version.outputs.new_tag }}
         run: |
@@ -33,6 +35,7 @@ jobs:
 
   release:
     needs: calculate
+    if: needs.calculate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

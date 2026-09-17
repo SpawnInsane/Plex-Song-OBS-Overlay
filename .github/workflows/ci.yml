@@ -24,6 +24,8 @@ jobs:
         run: go test -race ./...
       - name: Test playback clock
         run: node web/playback-clock.test.cjs
+      - name: Test release version calculation
+        run: node .github/scripts/calculate-release-version.test.cjs
       - name: Run static analysis
         run: go vet ./...
       - name: Build Windows application
