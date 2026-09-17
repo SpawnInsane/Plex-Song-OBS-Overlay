@@ -22,6 +22,8 @@ jobs:
           cache: true
       - name: Run tests with race detection
         run: go test -race ./...
+      - name: Test playback clock
+        run: node web/playback-clock.test.cjs
       - name: Run static analysis
         run: go vet ./...
       - name: Build Windows application

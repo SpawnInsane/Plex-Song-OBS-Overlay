@@ -1,5 +1,7 @@
 package main
 
+//go:generate go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --manifest gui --icon assets/plex-song-obs-overlay.png --out rsrc
+
 import (
 	"context"
 	"embed"
@@ -13,9 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +59,8 @@ type mediaContainer struct {
 
 type track struct {
 	Type        string   `xml:"type,attr"`
+	RatingKey   string   `xml:"ratingKey,attr"`
+	Key         string   `xml:"key,attr"`
 	Title       string   `xml:"title,attr"`
 	Grandparent string   `xml:"grandparentTitle,attr"`
 	Parent      string   `xml:"parentTitle,attr"`
@@ -80,6 +82,7 @@ type player struct {
 type nowPlaying struct {
 	Playing    bool   `json:"playing"`
 	Paused     bool   `json:"paused"`
+	TrackID    string `json:"trackId,omitempty"`
 	Title      string `json:"title,omitempty"`
 	Artist     string `json:"artist,omitempty"`
 	Album      string `json:"album,omitempty"`
@@ -275,7 +278,12 @@ func main() {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		if serverAlreadyRunning() {
-			_ = openBrowser("http://" + listenAddr + "/")
+			serverStopped, stopMonitoring := monitorServerShutdown("http://"+listenAddr+"/health", 500*time.Millisecond)
+			defer stopMonitoring()
+			if err := runControlWindow("http://"+listenAddr+"/", serverStopped); err != nil {
+				slog.Error("cannot open control window", "error", err)
+				showControlWindowError(err)
+			}
 			return
 		}
 		slog.Error("cannot start local server", "error", err)
@@ -286,22 +294,22 @@ func main() {
 	var shutdownOnce sync.Once
 	mux := routes(store, func() { shutdownOnce.Do(func() { close(shutdown) }) })
 	server := &http.Server{Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	serverErrors := make(chan error, 1)
-	go func() { serverErrors <- server.Serve(listener) }()
-
-	_ = openBrowser("http://" + listenAddr + "/")
-	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
-
-	select {
-	case <-shutdown:
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = server.Shutdown(ctx)
-	case err := <-serverErrors:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server stopped", "error", err)
 		}
+		shutdownOnce.Do(func() { close(shutdown) })
+	}()
+
+	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
+	if err := runControlWindow("http://"+listenAddr+"/", shutdown); err != nil {
+		slog.Error("cannot open control window", "error", err)
+		showControlWindowError(err)
 	}
+	shutdownOnce.Do(func() { close(shutdown) })
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
 }
 
 func routes(store *settingsStore, stop func()) *http.ServeMux {
@@ -385,7 +393,11 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 			writeJSON(w, http.StatusOK, nowPlaying{})
 			return
 		}
-		result := nowPlaying{Playing: current.Player.State == "playing", Paused: current.Player.State == "paused", Title: current.Title, Artist: current.Grandparent, Album: current.Parent, PositionMS: current.ViewOffset, DurationMS: current.Duration}
+		trackID := current.RatingKey
+		if trackID == "" {
+			trackID = current.Key
+		}
+		result := nowPlaying{Playing: current.Player.State == "playing", Paused: current.Player.State == "paused", TrackID: trackID, Title: current.Title, Artist: current.Grandparent, Album: current.Parent, PositionMS: current.ViewOffset, DurationMS: current.Duration}
 		if current.Thumb != "" {
 			result.ArtworkURL = "/api/artwork?path=" + url.QueryEscape(current.Thumb)
 		}
@@ -449,7 +461,11 @@ func sameOrigin(r *http.Request) bool {
 
 func serverAlreadyRunning() bool {
 	client := &http.Client{Timeout: time.Second}
-	resp, err := client.Get("http://" + listenAddr + "/health")
+	return serverHealthy(client, "http://"+listenAddr+"/health")
+}
+
+func serverHealthy(client *http.Client, address string) bool {
+	resp, err := client.Get(address)
 	if err != nil {
 		return false
 	}
@@ -457,17 +473,27 @@ func serverAlreadyRunning() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func openBrowser(address string) error {
-	var command *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", address)
-	case "darwin":
-		command = exec.Command("open", address)
-	default:
-		command = exec.Command("xdg-open", address)
-	}
-	return command.Start()
+func monitorServerShutdown(address string, interval time.Duration) (<-chan struct{}, func()) {
+	stopped := make(chan struct{})
+	cancel := make(chan struct{})
+	var cancelOnce sync.Once
+	client := &http.Client{Timeout: time.Second}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if !serverHealthy(client, address) {
+					close(stopped)
+					return
+				}
+			case <-cancel:
+				return
+			}
+		}
+	}()
+	return stopped, func() { cancelOnce.Do(func() { close(cancel) }) }
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
