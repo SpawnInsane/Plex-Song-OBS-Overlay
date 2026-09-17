@@ -79,6 +79,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Configure commit signing
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: bash .github/scripts/configure-release-signing.sh
       - name: Reset unchanged develop release notes
         id: reset
         run: |
@@ -87,10 +91,8 @@ jobs:
           if ! cmp -s body.md "$RUNNER_TEMP/develop-body.md"; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           git checkout -B develop origin/develop
           printf '# Release notes\n' > body.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add body.md
-          git commit -m "chore: start next release notes"
+          git commit -S -m "chore: start next release notes"
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Push reset release notes
         if: steps.reset.outputs.changed == 'true'
