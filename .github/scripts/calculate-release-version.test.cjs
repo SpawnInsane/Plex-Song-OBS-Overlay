@@ -10,12 +10,22 @@ assert.equal(parseRequestedMajor("2\n"), 2);
 assert.equal(parseRequestedMajor(""), null);
 assert.throws(() => parseRequestedMajor("v2.0.0"), /positive integer/);
 
-assert.equal(buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["feat(api)!: replace response"], channel: "rc" }).newTag, "v0.3.0-rc.1");
-assert.equal(buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["fix: prepare milestone"], channel: "rc", requestedMajor: "1" }).newTag, "v1.0.0-rc.1");
-assert.equal(buildReleasePlan({ tags: ["v1.0.0"], mergedTags: ["v1.0.0"], messages: ["fix: next cycle"], channel: "stable", requestedMajor: "1" }).newTag, "v1.0.1");
-assert.equal(buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["fix: behavior"], channel: "rc" }).newTag, "v0.2.2-rc.1");
+const automaticMajor = buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["feat(api)!: replace response"], channel: "rc" });
+assert.equal(automaticMajor.newTag, "v0.3.0-rc.1");
+assert.equal(automaticMajor.publish, true);
+const explicitMajor = buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["fix: prepare milestone"], channel: "rc", requestedMajor: "1" });
+assert.equal(explicitMajor.newTag, "v1.0.0-rc.1");
+assert.equal(explicitMajor.publish, true);
+const stablePatch = buildReleasePlan({ tags: ["v1.0.0"], mergedTags: ["v1.0.0"], messages: ["fix: next cycle"], channel: "stable", requestedMajor: "1" });
+assert.equal(stablePatch.newTag, "v1.0.1");
+assert.equal(stablePatch.publish, true);
+const patchCandidate = buildReleasePlan({ tags: ["v0.2.1"], mergedTags: ["v0.2.1"], messages: ["fix: behavior"], channel: "rc" });
+assert.equal(patchCandidate.newTag, "v0.2.2-rc.1");
+assert.equal(patchCandidate.publish, false);
 assert.equal(buildReleasePlan({ tags: ["v0.2.1", "v0.2.2-rc.1"], mergedTags: ["v0.2.1", "v0.2.2-rc.1"], messages: ["feat: capability"], channel: "rc" }).newTag, "v0.3.0-rc.2");
 assert.equal(buildReleasePlan({ tags: ["v0.2.2-rc.1", "v0.3.0-rc.2", "v0.3.0"], mergedTags: ["v0.2.2-rc.1", "v0.3.0-rc.2"], messages: ["fix: next cycle"], channel: "rc" }).newTag, "v0.3.1-rc.1");
+const minorCandidate = buildReleasePlan({ tags: ["v0.2.1", "v0.3.0-rc.1"], mergedTags: ["v0.2.1", "v0.3.0-rc.1"], messages: ["feat: capability", "fix: follow-up"], channel: "rc" });
+assert.equal(minorCandidate.publish, true);
 assert.equal(buildReleasePlan({ tags: ["v0.2.1", "v0.3.0-rc.1"], mergedTags: ["v0.2.1", "v0.3.0-rc.1"], messages: ["feat: capability"], channel: "stable" }).newTag, "v0.3.0");
 
 console.log("release version tests passed");
