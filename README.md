@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/plex-song-obs-overlay.png" alt="Plex Song OBS Overlay icon" width="180">
+</p>
+
 # Plex Song OBS Overlay
 
 Plex Song OBS Overlay is a small Windows application that displays the song currently playing for a Plex user as a transparent Twitch/OBS overlay.

@@ -36,6 +36,7 @@ func runControlWindow(address string, shutdown <-chan struct{}) error {
 			Title:  productName,
 			Width:  900,
 			Height: 760,
+			IconId: 1,
 			Center: true,
 		},
 	})
