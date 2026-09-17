@@ -26,18 +26,22 @@ jobs:
         id: version
         run: node .github/scripts/calculate-release-version.cjs --channel=stable
       - name: Check out develop
+        if: steps.version.outputs.publish == 'true'
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: git checkout -B "$HEAD_BRANCH" "origin/$HEAD_BRANCH"
       - name: Update version metadata
+        if: steps.version.outputs.publish == 'true'
         env:
           NEXT_TAG: ${{ steps.version.outputs.new_tag }}
         run: node -e 'const fs=require("fs"); fs.writeFileSync("version.json", JSON.stringify({version:process.env.NEXT_TAG}, null, 2)+"\n");'
       - name: Configure commit signing
+        if: steps.version.outputs.publish == 'true'
         env:
           RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
         run: bash .github/scripts/configure-release-signing.sh
       - name: Commit version metadata
+        if: steps.version.outputs.publish == 'true'
         id: commit
         env:
           NEXT_TAG: ${{ steps.version.outputs.new_tag }}
