@@ -28,7 +28,7 @@ The application must be running while you stream. Keep the control window open w
 3. Set the width to `620` and height to `160`.
 4. Optionally enable **Refresh browser when scene becomes active**.
 
-The card stays transparent and hidden when the selected user is not playing music. It displays album artwork, title, artist, album, smoothly animated progress, and paused status. Song changes and playback seeks reset the progress position automatically.
+The card stays transparent and hidden when the selected user is not playing music. It displays album artwork, title, artist, album, smoothly animated progress, current and total track times, and paused status. Song changes and playback seeks reset the progress position automatically.
 
 ## Security notes
 
