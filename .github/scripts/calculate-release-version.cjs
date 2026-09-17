@@ -26,12 +26,16 @@ function findLatestStableTag(tags) {
 }
 
 function requiredBump(messages) {
-  let bump = "patch";
+  let bump = "none";
   for (const message of messages) {
-    const header = message.split(/\r?\n/, 1)[0];
-    const conventional = /^([a-z][a-z0-9-]*)(?:\([^\r\n)]+\))?(!)?:/.exec(header);
-    if ((conventional && conventional[2] === "!") || /(^|\r?\n)BREAKING(?: CHANGE|-CHANGE):/m.test(message)) return "major";
-    if (conventional && conventional[1] === "feat") bump = "minor";
+    const conventionalHeaders = message.split(/\r?\n/)
+      .map((line) => /^([a-z][a-z0-9-]*)(?:\([^\r\n)]+\))?(!)?:/.exec(line.trim()))
+      .filter(Boolean);
+    const releaseHeaders = conventionalHeaders.filter((header) => ["feat", "fix", "perf", "revert"].includes(header[1]));
+    if (releaseHeaders.length === 0) continue;
+    if (releaseHeaders.some((header) => header[2] === "!") || /(^|\r?\n)BREAKING(?: CHANGE|-CHANGE):/m.test(message)) return "major";
+    if (releaseHeaders.some((header) => header[1] === "feat")) bump = "minor";
+    else if (bump === "none") bump = "patch";
   }
   return bump;
 }
@@ -57,9 +61,10 @@ function buildReleasePlan({ tags, mergedTags, messages, channel, requestedMajor 
   const requestedMajorVersion = explicitMajor && explicitMajor > stableVersion.major ? { major: explicitMajor, minor: 0, patch: 0 } : null;
   const conventionalBump = requiredBump(messages);
   const automaticBump = conventionalBump === "major" ? "minor" : conventionalBump;
-  const nextStable = requestedMajorVersion || incrementVersion(stableVersion, automaticBump);
+  const automaticRelease = automaticBump !== "none";
+  const nextStable = requestedMajorVersion || (automaticRelease ? incrementVersion(stableVersion, automaticBump) : stableVersion);
   const nextStableText = formatVersion(nextStable);
-  const publish = channel === "stable" || requestedMajorVersion !== null || automaticBump === "minor";
+  const publish = requestedMajorVersion !== null || (channel === "stable" ? automaticRelease : automaticBump === "minor");
 
   if (channel === "stable") {
     return { channel, publish, latestStableTag: latestStable ? latestStable.tag : "", previousTag: latestStable ? latestStable.tag : "", stableVersion: nextStableText, newVersion: nextStableText, newTag: `v${nextStableText}`, rcNumber: "", releaseName: `Release v${nextStableText}` };

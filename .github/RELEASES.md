@@ -7,6 +7,7 @@ Commit subjects control semantic versioning:
 - `fix:` produces a patch release.
 - `feat:` produces a minor release.
 - `feat!:` or a `BREAKING CHANGE:` footer is treated as minor unless `.github/release-major-version` explicitly requests the next major.
+- `chore:` and other maintenance-only commit or pull-request titles do not produce a release or change the version.
 
 Each release contains the console-free Windows executable and a SHA-256 checksum. Curated user-facing notes accumulate in `body.md`; GitHub-generated commit notes are appended automatically.
 
