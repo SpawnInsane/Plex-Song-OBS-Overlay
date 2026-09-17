@@ -273,7 +273,9 @@ func main() {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		if serverAlreadyRunning() {
-			if err := runControlWindow("http://"+listenAddr+"/", nil); err != nil {
+			serverStopped, stopMonitoring := monitorServerShutdown("http://"+listenAddr+"/health", 500*time.Millisecond)
+			defer stopMonitoring()
+			if err := runControlWindow("http://"+listenAddr+"/", serverStopped); err != nil {
 				slog.Error("cannot open control window", "error", err)
 				showControlWindowError(err)
 			}
@@ -450,12 +452,39 @@ func sameOrigin(r *http.Request) bool {
 
 func serverAlreadyRunning() bool {
 	client := &http.Client{Timeout: time.Second}
-	resp, err := client.Get("http://" + listenAddr + "/health")
+	return serverHealthy(client, "http://"+listenAddr+"/health")
+}
+
+func serverHealthy(client *http.Client, address string) bool {
+	resp, err := client.Get(address)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+func monitorServerShutdown(address string, interval time.Duration) (<-chan struct{}, func()) {
+	stopped := make(chan struct{})
+	cancel := make(chan struct{})
+	var cancelOnce sync.Once
+	client := &http.Client{Timeout: time.Second}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if !serverHealthy(client, address) {
+					close(stopped)
+					return
+				}
+			case <-cancel:
+				return
+			}
+		}
+	}()
+	return stopped, func() { cancelOnce.Do(func() { close(cancel) }) }
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

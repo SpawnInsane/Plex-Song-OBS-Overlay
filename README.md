@@ -12,7 +12,7 @@ Plex Song OBS Overlay is a small Windows application that displays the song curr
 
 Your settings are saved automatically in your Windows user configuration folder and remain available after the application closes. The control window displays the exact file location. The Plex token is never included in the overlay URL or returned to the control window after it is saved.
 
-The application must be running while you stream. Keep the control window open while the overlay is in use. Closing the window or selecting **Stop application** exits the program. Opening the executable again while it is already running opens another control window for the running program.
+The application must be running while you stream. Keep the control window open while the overlay is in use. Closing the primary window or selecting **Stop application** exits the program. Opening the executable again while it is already running opens another control window for the running program; any additional windows close automatically when the primary application stops.
 
 ## Plex settings
 
