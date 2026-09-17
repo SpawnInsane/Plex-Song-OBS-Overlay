@@ -16,7 +16,7 @@ jobs:
   calculate:
     runs-on: ubuntu-latest
     outputs:
-      publish: ${{ steps.needed.outputs.publish }}
+      publish: ${{ steps.version.outputs.publish }}
       new_tag: ${{ steps.version.outputs.new_tag }}
       previous_tag: ${{ steps.version.outputs.previous_tag }}
       release_name: ${{ steps.version.outputs.release_name }}
