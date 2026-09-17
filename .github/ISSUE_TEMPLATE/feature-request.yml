@@ -1,0 +1,73 @@
+name: Feature request
+description: Suggest an improvement or new capability for Plex Song OBS Overlay.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a way to improve Plex Song OBS Overlay. Please focus on the user problem and the desired result so different solutions can be considered.
+
+  - type: checkboxes
+    id: existing-request
+    attributes:
+      label: Existing request check
+      description: Please search the open and closed issues before submitting a new request.
+      options:
+        - label: I searched the existing issues and did not find a duplicate request.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or limitation
+      description: What are you trying to accomplish, and what currently makes it difficult or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe how you would like the application to behave.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: Relevant area
+      multiple: true
+      options:
+        - Desktop control window
+        - Setup and configuration
+        - Plex integration
+        - OBS overlay appearance
+        - Track information or artwork
+        - Playback progress or timing
+        - Installation and releases
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or different solutions you have tried or considered.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add mockups, screenshots, examples, or links that help explain the request. Do not include Plex tokens or other credentials.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I may be willing to help implement or test this feature.
+          required: false
