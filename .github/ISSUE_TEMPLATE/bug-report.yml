@@ -1,0 +1,135 @@
+name: Bug report
+description: Report a reproducible problem with Plex Song OBS Overlay.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Plex Song OBS Overlay.
+
+        Do not include your Plex token, configuration file, or other credentials. Report security vulnerabilities privately through [GitHub Security Advisories](https://github.com/SpawnInsane/Plex-Song-OBS-Overlay/security/advisories/new).
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Existing issue check
+      description: Please search the open and closed issues before submitting a new report.
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Application version
+      description: Enter the version shown in the application or release filename.
+      placeholder: "Example: v0.2.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation method
+      options:
+        - Downloaded Windows executable from GitHub Releases
+        - Built from source
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Example: Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: input
+    id: obs-version
+    attributes:
+      label: OBS Studio version
+      description: Required only when the problem involves the OBS browser source or overlay.
+      placeholder: "Example: OBS Studio 32.0.1"
+
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Desktop control window
+        - Setup or saved settings
+        - Plex connection or now-playing detection
+        - OBS browser-source overlay
+        - Artwork or track information
+        - Progress bar or playback timer
+        - Installation or startup
+        - Release artifact or updater workflow
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: Describe what happened, including any visible error messages.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable sequence that triggers the problem.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does this happen?
+      options:
+        - Every time
+        - Often
+        - Sometimes
+        - Once
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste only relevant output and remove Plex tokens, URLs containing credentials, usernames, and other private information.
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, recordings, Plex server details, or anything else that may help reproduce the problem.
+
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive information
+      options:
+        - label: I removed Plex tokens and other credentials from this report and its attachments.
+          required: true
