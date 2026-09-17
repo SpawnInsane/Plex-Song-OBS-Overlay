@@ -5,7 +5,9 @@
     "group:allNonMajor",
     "helpers:pinGitHubActionDigests"
   ],
-  "baseBranches": ["develop"],
+  "baseBranchPatterns": [
+    "develop"
+  ],
   "packageRules": [
     {
       "description": "Automerge non-major updates when tests pass",
