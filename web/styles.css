@@ -41,5 +41,7 @@ body { display: flex; align-items: flex-end; padding: 20px; }
 .title { margin-top: 8px; font-size: 25px; line-height: 1.12; font-weight: 760; }
 .artist { margin-top: 4px; color: rgba(255,255,255,.82); font-size: 17px; }
 .album { margin-top: 2px; color: rgba(255,255,255,.48); font-size: 13px; }
-.progress { height: 3px; margin-top: 13px; overflow: hidden; border-radius: 10px; background: rgba(255,255,255,.12); }
+.progress-row { display: flex; align-items: center; gap: 10px; margin-top: 13px; }
+.progress { flex: 1; height: 3px; overflow: hidden; border-radius: 10px; background: rgba(255,255,255,.12); }
 #progress-bar { height: 100%; width: 0; border-radius: inherit; background: #e5a00d; }
+.progress-time { flex: 0 0 auto; min-width: 72px; color: rgba(255,255,255,.58); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }

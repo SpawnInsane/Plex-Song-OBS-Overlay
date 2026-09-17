@@ -5,6 +5,7 @@ const artist = document.querySelector('#artist');
 const album = document.querySelector('#album');
 const state = document.querySelector('#state');
 const progress = document.querySelector('#progress-bar');
+const progressTime = document.querySelector('#progress-time');
 
 let lastArtwork = '';
 let currentTrackID = null;
@@ -12,6 +13,7 @@ let anchorPositionMs = 0;
 let anchorDurationMs = 0;
 let anchorTime = performance.now();
 let progressPlaying = false;
+let lastProgressTime = '';
 
 function trackIdentity(song) {
   return song.trackId || [song.title, song.artist, song.album, song.durationMs, song.artworkUrl].join('\u001f');
@@ -22,6 +24,25 @@ function estimatedPosition(now = performance.now()) {
   return Math.max(0, Math.min(anchorDurationMs, anchorPositionMs + elapsed));
 }
 
+function formatTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    : `${totalMinutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function renderProgressTime(positionMs, durationMs) {
+  const text = `${formatTime(positionMs)} / ${formatTime(durationMs)}`;
+  if (text !== lastProgressTime) {
+    progressTime.textContent = text;
+    lastProgressTime = text;
+  }
+}
+
 function resetProgress() {
   currentTrackID = null;
   anchorPositionMs = 0;
@@ -29,6 +50,7 @@ function resetProgress() {
   anchorTime = performance.now();
   progressPlaying = false;
   progress.style.width = '0%';
+  renderProgressTime(0, 0);
 }
 
 function synchronizeProgress(song) {
@@ -52,8 +74,10 @@ function synchronizeProgress(song) {
 }
 
 function animateProgress(now) {
-  const percent = anchorDurationMs > 0 ? estimatedPosition(now) / anchorDurationMs * 100 : 0;
+  const position = estimatedPosition(now);
+  const percent = anchorDurationMs > 0 ? position / anchorDurationMs * 100 : 0;
   progress.style.width = `${percent}%`;
+  renderProgressTime(position, anchorDurationMs);
   requestAnimationFrame(animateProgress);
 }
 
