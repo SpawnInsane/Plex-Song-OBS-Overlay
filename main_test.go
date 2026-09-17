@@ -16,7 +16,7 @@ import (
 func TestCurrentTrackSelectsConfiguredUser(t *testing.T) {
 	const sessions = `<MediaContainer size="2">
 <Track type="track" title="Wrong Song" grandparentTitle="Other Artist"><User title="Other"/><Player state="playing"/></Track>
-<Track type="track" title="Right Song" grandparentTitle="Artist" parentTitle="Album" thumb="/library/metadata/1/thumb/2" duration="240000" viewOffset="12000"><User title="Sara"/><Player state="paused"/></Track>
+<Track type="track" ratingKey="123" key="/library/metadata/123" title="Right Song" grandparentTitle="Artist" parentTitle="Album" thumb="/library/metadata/1/thumb/2" duration="240000" viewOffset="12000"><User title="Sara"/><Player state="paused"/></Track>
 </MediaContainer>`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("X-Plex-Token"); got != "secret" {
@@ -36,8 +36,31 @@ func TestCurrentTrackSelectsConfiguredUser(t *testing.T) {
 	if !found {
 		t.Fatal("expected a track")
 	}
-	if got.Title != "Right Song" || got.Player.State != "paused" || got.Duration != 240000 {
+	if got.RatingKey != "123" || got.Key != "/library/metadata/123" || got.Title != "Right Song" || got.Player.State != "paused" || got.Duration != 240000 {
 		t.Fatalf("unexpected track: %+v", got)
+	}
+}
+
+func TestNowPlayingIncludesStableTrackID(t *testing.T) {
+	plex := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<MediaContainer><Track type="track" ratingKey="456" title="Song" duration="180000" viewOffset="15000"><User title="Sara"/><Player state="playing"/></Track></MediaContainer>`))
+	}))
+	defer plex.Close()
+
+	store := &settingsStore{settings: savedSettings{PlexURL: plex.URL, PlexToken: "secret", PlexUser: "Sara", PollIntervalSeconds: 3}}
+	server := httptest.NewServer(routes(store, func() {}))
+	defer server.Close()
+	response, err := server.Client().Get(server.URL + "/api/now-playing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var current nowPlaying
+	if err := json.NewDecoder(response.Body).Decode(&current); err != nil {
+		t.Fatal(err)
+	}
+	if current.TrackID != "456" || current.PositionMS != 15000 || !current.Playing {
+		t.Fatalf("unexpected now-playing response: %+v", current)
 	}
 }
 

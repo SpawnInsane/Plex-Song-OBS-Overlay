@@ -1,5 +1,7 @@
 package main
 
+//go:generate go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --manifest gui --icon assets/plex-song-obs-overlay.png --out rsrc
+
 import (
 	"context"
 	"embed"
@@ -57,6 +59,8 @@ type mediaContainer struct {
 
 type track struct {
 	Type        string   `xml:"type,attr"`
+	RatingKey   string   `xml:"ratingKey,attr"`
+	Key         string   `xml:"key,attr"`
 	Title       string   `xml:"title,attr"`
 	Grandparent string   `xml:"grandparentTitle,attr"`
 	Parent      string   `xml:"parentTitle,attr"`
@@ -78,6 +82,7 @@ type player struct {
 type nowPlaying struct {
 	Playing    bool   `json:"playing"`
 	Paused     bool   `json:"paused"`
+	TrackID    string `json:"trackId,omitempty"`
 	Title      string `json:"title,omitempty"`
 	Artist     string `json:"artist,omitempty"`
 	Album      string `json:"album,omitempty"`
@@ -388,7 +393,11 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 			writeJSON(w, http.StatusOK, nowPlaying{})
 			return
 		}
-		result := nowPlaying{Playing: current.Player.State == "playing", Paused: current.Player.State == "paused", Title: current.Title, Artist: current.Grandparent, Album: current.Parent, PositionMS: current.ViewOffset, DurationMS: current.Duration}
+		trackID := current.RatingKey
+		if trackID == "" {
+			trackID = current.Key
+		}
+		result := nowPlaying{Playing: current.Player.State == "playing", Paused: current.Player.State == "paused", TrackID: trackID, Title: current.Title, Artist: current.Grandparent, Album: current.Parent, PositionMS: current.ViewOffset, DurationMS: current.Duration}
 		if current.Thumb != "" {
 			result.ArtworkURL = "/api/artwork?path=" + url.QueryEscape(current.Thumb)
 		}
