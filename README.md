@@ -5,14 +5,14 @@ Plex Song OBS Overlay is a small Windows application that displays the song curr
 ## Quick start
 
 1. Double-click `PlexSongOBSOverlay.exe`.
-2. The setup page opens automatically in your web browser.
+2. The Plex Song OBS Overlay control window opens on your desktop.
 3. Enter your Plex server URL, Plex token, and optional Plex username.
 4. Select **Save settings**, then **Test connection**.
-5. Copy the overlay URL shown on the setup page into an OBS Browser Source.
+5. Copy the overlay URL shown in the control window into an OBS Browser Source.
 
-Your settings are saved automatically in your Windows user configuration folder and remain available after the application closes. The setup page displays the exact file location. The Plex token is never included in the overlay URL or returned to the browser after it is saved.
+Your settings are saved automatically in your Windows user configuration folder and remain available after the application closes. The control window displays the exact file location. The Plex token is never included in the overlay URL or returned to the control window after it is saved.
 
-The application must be running while you stream. Use **Stop application** at the bottom of the setup page when you are finished. Opening the executable again while it is already running simply reopens the setup page.
+The application must be running while you stream. Keep the control window open while the overlay is in use. Closing the primary window or selecting **Stop application** exits the program. Opening the executable again while it is already running opens another control window for the running program; any additional windows close automatically when the primary application stops.
 
 ## Plex settings
 
@@ -38,16 +38,16 @@ Plex Song OBS Overlay listens only on `127.0.0.1`, so other computers cannot ope
 
 Go 1.24 or newer is required.
 
+The Windows application uses the Microsoft Edge WebView2 Runtime for its desktop control window. WebView2 is included with Windows 11 and most current Windows 10 installations. If the application reports that WebView2 is unavailable, install Microsoft's [Evergreen WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/consumer/) and start the application again.
+
 For the normal Windows application without a console window:
 
 ```powershell
 go build -ldflags "-H=windowsgui" -o PlexSongOBSOverlay.exe .
 ```
 
-For a development build that keeps diagnostic output visible:
+For a development build that keeps diagnostic output visible (non-Windows development opens the control page in the default browser):
 
 ```powershell
 go run .
 ```
-
-No third-party Go packages are required.

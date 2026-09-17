@@ -12,6 +12,8 @@ Do not disclose suspected vulnerabilities in public issues, discussions, or pull
 
 Plex Song OBS Overlay is a local Windows application. Its web server is bound to `127.0.0.1:7070` and is not intended to be exposed to a LAN or the public internet. It connects from the local process to the operator-configured Plex server.
 
+The desktop control window embeds the Windows WebView2 Runtime and loads the same loopback-hosted interface used by the OBS overlay. WebView2 may store browser data in the current user's local cache, but the application does not use that storage for Plex credentials; saved credentials remain in the application configuration file.
+
 The Plex token is sensitive and is stored in the current user's configuration directory. The token must never be returned by the settings API, included in the overlay URL, logged, or committed to this repository. Anyone with access to the user's Windows account and configuration files may be able to read it.
 
 State-changing browser requests must remain same-origin. Plex responses and artwork are untrusted remote input and must remain size-bounded. The artwork proxy must only contact the configured Plex origin and accept image responses.
