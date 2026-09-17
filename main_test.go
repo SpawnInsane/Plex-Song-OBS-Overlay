@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestCurrentTrackSelectsConfiguredUser(t *testing.T) {
@@ -148,5 +149,26 @@ func TestMigrateLegacySettings(t *testing.T) {
 	}
 	if got := current.snapshot(); got != want {
 		t.Fatalf("migrated settings = %+v, want %+v", got, want)
+	}
+}
+
+func TestMonitorServerShutdown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}))
+	stopped, stopMonitoring := monitorServerShutdown(server.URL, 10*time.Millisecond)
+	defer stopMonitoring()
+
+	select {
+	case <-stopped:
+		t.Fatal("monitor reported a healthy server as stopped")
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	server.Close()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("monitor did not report the stopped server")
 	}
 }
