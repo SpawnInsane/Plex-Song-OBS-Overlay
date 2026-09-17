@@ -42,4 +42,4 @@ body { display: flex; align-items: flex-end; padding: 20px; }
 .artist { margin-top: 4px; color: rgba(255,255,255,.82); font-size: 17px; }
 .album { margin-top: 2px; color: rgba(255,255,255,.48); font-size: 13px; }
 .progress { height: 3px; margin-top: 13px; overflow: hidden; border-radius: 10px; background: rgba(255,255,255,.12); }
-#progress-bar { height: 100%; width: 0; border-radius: inherit; background: #e5a00d; transition: width 1s linear; }
+#progress-bar { height: 100%; width: 0; border-radius: inherit; background: #e5a00d; }
