@@ -54,8 +54,8 @@ jobs:
           CGO_ENABLED: 0
         run: |
           mkdir dist
-          go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/PlexSongGrabber.exe .
-          sha256sum dist/PlexSongGrabber.exe > dist/PlexSongGrabber.exe.sha256
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/PlexSongOBSOverlay.exe .
+          sha256sum dist/PlexSongOBSOverlay.exe > dist/PlexSongOBSOverlay.exe.sha256
       - name: Create GitHub release
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:

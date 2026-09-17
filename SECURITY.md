@@ -10,7 +10,7 @@ Do not disclose suspected vulnerabilities in public issues, discussions, or pull
 
 ## Security boundaries
 
-Plex Song Grabber is a local Windows application. Its web server is bound to `127.0.0.1:7070` and is not intended to be exposed to a LAN or the public internet. It connects from the local process to the operator-configured Plex server.
+Plex Song OBS Overlay is a local Windows application. Its web server is bound to `127.0.0.1:7070` and is not intended to be exposed to a LAN or the public internet. It connects from the local process to the operator-configured Plex server.
 
 The Plex token is sensitive and is stored in the current user's configuration directory. The token must never be returned by the settings API, included in the overlay URL, logged, or committed to this repository. Anyone with access to the user's Windows account and configuration files may be able to read it.
 

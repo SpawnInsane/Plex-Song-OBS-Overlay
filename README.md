@@ -1,10 +1,10 @@
-# Plex Song Grabber
+# Plex Song OBS Overlay
 
-Plex Song Grabber is a small Windows application that displays the song currently playing for a Plex user as a transparent Twitch/OBS overlay.
+Plex Song OBS Overlay is a small Windows application that displays the song currently playing for a Plex user as a transparent Twitch/OBS overlay.
 
 ## Quick start
 
-1. Double-click `PlexSongGrabber.exe`.
+1. Double-click `PlexSongOBSOverlay.exe`.
 2. The setup page opens automatically in your web browser.
 3. Enter your Plex server URL, Plex token, and optional Plex username.
 4. Select **Save settings**, then **Test connection**.
@@ -32,7 +32,7 @@ The card stays transparent and hidden when the selected user is not playing musi
 
 ## Security notes
 
-Plex Song Grabber listens only on `127.0.0.1`, so other computers cannot open its settings page. The Plex token is saved locally in the current Windows user's configuration file. Do not share that file or commit it to source control.
+Plex Song OBS Overlay listens only on `127.0.0.1`, so other computers cannot open its settings page. The Plex token is saved locally in the current Windows user's configuration file. Do not share that file or commit it to source control.
 
 ## Build from source
 
@@ -41,7 +41,7 @@ Go 1.24 or newer is required.
 For the normal Windows application without a console window:
 
 ```powershell
-go build -ldflags "-H=windowsgui" -o PlexSongGrabber.exe .
+go build -ldflags "-H=windowsgui" -o PlexSongOBSOverlay.exe .
 ```
 
 For a development build that keeps diagnostic output visible:
