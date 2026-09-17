@@ -70,6 +70,10 @@ jobs:
         env:
           NEXT_TAG: ${{ needs.calculate.outputs.new_tag }}
         run: node -e 'const fs=require("fs"); fs.writeFileSync("version.json", JSON.stringify({version:process.env.NEXT_TAG}, null, 2)+"\n");'
+      - name: Configure commit signing
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: bash .github/scripts/configure-release-signing.sh
       - name: Commit version metadata
         id: commit
         env:
@@ -80,10 +84,8 @@ jobs:
             echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add version.json
-          git commit -m "chore: prepare ${NEXT_TAG} prerelease"
+          git commit -S -m "chore: prepare ${NEXT_TAG} prerelease"
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Push version metadata
