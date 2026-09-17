@@ -1,6 +1,6 @@
 # Release automation
 
-Development work branches from `develop` and returns to `develop` through pull requests. Merging a pull request into `develop` creates a release candidate. A `develop` to `main` pull request prepares the stable version, and merging it creates the stable GitHub release.
+Development work branches from `develop` and returns to `develop` through pull requests. Merging into `develop` creates release candidates only while preparing a minor or explicitly requested major release; patch-only cycles do not publish release candidates. A `develop` to `main` pull request prepares the stable version, and merging it creates the stable GitHub release.
 
 Commit subjects control semantic versioning:
 

@@ -59,9 +59,10 @@ function buildReleasePlan({ tags, mergedTags, messages, channel, requestedMajor 
   const automaticBump = conventionalBump === "major" ? "minor" : conventionalBump;
   const nextStable = requestedMajorVersion || incrementVersion(stableVersion, automaticBump);
   const nextStableText = formatVersion(nextStable);
+  const publish = channel === "stable" || requestedMajorVersion !== null || automaticBump === "minor";
 
   if (channel === "stable") {
-    return { channel, latestStableTag: latestStable ? latestStable.tag : "", previousTag: latestStable ? latestStable.tag : "", stableVersion: nextStableText, newVersion: nextStableText, newTag: `v${nextStableText}`, rcNumber: "", releaseName: `Release v${nextStableText}` };
+    return { channel, publish, latestStableTag: latestStable ? latestStable.tag : "", previousTag: latestStable ? latestStable.tag : "", stableVersion: nextStableText, newVersion: nextStableText, newTag: `v${nextStableText}`, rcNumber: "", releaseName: `Release v${nextStableText}` };
   }
 
   const activeCandidates = mergedTags.map(parseReleaseCandidate)
@@ -70,7 +71,7 @@ function buildReleasePlan({ tags, mergedTags, messages, channel, requestedMajor 
   const previousCandidate = activeCandidates[0] || null;
   const rcNumber = previousCandidate ? previousCandidate.number + 1 : 1;
   const newVersion = `${nextStableText}-rc.${rcNumber}`;
-  return { channel, latestStableTag: latestStable ? latestStable.tag : "", previousTag: previousCandidate ? previousCandidate.tag : latestStable ? latestStable.tag : "", stableVersion: nextStableText, newVersion, newTag: `v${newVersion}`, rcNumber: String(rcNumber), releaseName: `Release v${nextStableText} RC${rcNumber}` };
+  return { channel, publish, latestStableTag: latestStable ? latestStable.tag : "", previousTag: previousCandidate ? previousCandidate.tag : latestStable ? latestStable.tag : "", stableVersion: nextStableText, newVersion, newTag: `v${newVersion}`, rcNumber: String(rcNumber), releaseName: `Release v${nextStableText} RC${rcNumber}` };
 }
 
 function git(args) {
@@ -88,7 +89,7 @@ function main() {
   const majorFile = ".github/release-major-version";
   const requestedMajor = existsSync(majorFile) ? readFileSync(majorFile, "utf8") : null;
   const plan = buildReleasePlan({ tags, mergedTags, messages, channel, requestedMajor });
-  const outputNames = { latest_stable_tag: plan.latestStableTag, previous_tag: plan.previousTag, stable_version: plan.stableVersion, new_version: plan.newVersion, new_tag: plan.newTag, rc_number: plan.rcNumber, release_name: plan.releaseName };
+  const outputNames = { publish: String(plan.publish), latest_stable_tag: plan.latestStableTag, previous_tag: plan.previousTag, stable_version: plan.stableVersion, new_version: plan.newVersion, new_tag: plan.newTag, rc_number: plan.rcNumber, release_name: plan.releaseName };
   if (process.env.GITHUB_OUTPUT) {
     for (const [name, value] of Object.entries(outputNames)) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
   }
