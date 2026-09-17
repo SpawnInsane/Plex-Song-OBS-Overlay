@@ -13,9 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -275,7 +273,10 @@ func main() {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		if serverAlreadyRunning() {
-			_ = openBrowser("http://" + listenAddr + "/")
+			if err := runControlWindow("http://"+listenAddr+"/", nil); err != nil {
+				slog.Error("cannot open control window", "error", err)
+				showControlWindowError(err)
+			}
 			return
 		}
 		slog.Error("cannot start local server", "error", err)
@@ -286,22 +287,22 @@ func main() {
 	var shutdownOnce sync.Once
 	mux := routes(store, func() { shutdownOnce.Do(func() { close(shutdown) }) })
 	server := &http.Server{Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	serverErrors := make(chan error, 1)
-	go func() { serverErrors <- server.Serve(listener) }()
-
-	_ = openBrowser("http://" + listenAddr + "/")
-	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
-
-	select {
-	case <-shutdown:
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = server.Shutdown(ctx)
-	case err := <-serverErrors:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server stopped", "error", err)
 		}
+		shutdownOnce.Do(func() { close(shutdown) })
+	}()
+
+	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
+	if err := runControlWindow("http://"+listenAddr+"/", shutdown); err != nil {
+		slog.Error("cannot open control window", "error", err)
+		showControlWindowError(err)
 	}
+	shutdownOnce.Do(func() { close(shutdown) })
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
 }
 
 func routes(store *settingsStore, stop func()) *http.ServeMux {
@@ -455,19 +456,6 @@ func serverAlreadyRunning() bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
-}
-
-func openBrowser(address string) error {
-	var command *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", address)
-	case "darwin":
-		command = exec.Command("open", address)
-	default:
-		command = exec.Command("xdg-open", address)
-	}
-	return command.Start()
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

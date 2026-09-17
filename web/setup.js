@@ -87,7 +87,7 @@ document.querySelector('#copy-url').addEventListener('click', async () => {
 document.querySelector('#stop-server').addEventListener('click', async () => {
   if (!window.confirm('Stop Plex Song OBS Overlay? Your saved settings will not be removed.')) return;
   await fetch('/api/shutdown', { method: 'POST' });
-  document.body.innerHTML = '<main class="shell"><section class="panel"><h1>Application stopped</h1><p class="intro">You can close this tab. Double-click the application to start it again.</p></section></main>';
+  document.body.innerHTML = '<main class="shell"><section class="panel"><h1>Application stopped</h1><p class="intro">This window will close. Double-click the application to start it again.</p></section></main>';
 });
 
 loadSettings();
