@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,7 +49,7 @@ func TestNowPlayingIncludesStableTrackID(t *testing.T) {
 	defer plex.Close()
 
 	store := &settingsStore{settings: savedSettings{PlexURL: plex.URL, PlexToken: "secret", PlexUser: "Sara", PollIntervalSeconds: 3}}
-	server := httptest.NewServer(routes(store, func() {}))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
 	defer server.Close()
 	response, err := server.Client().Get(server.URL + "/api/now-playing")
 	if err != nil {
@@ -86,15 +87,18 @@ func TestSettingsPersistAndTokenIsNotReturned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(routes(store, func() {}))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
 	defer server.Close()
 
-	payload := []byte(`{"plexUrl":"http://plex.local:32400","plexToken":"very-secret","plexUser":"Sara","pollIntervalSeconds":5}`)
+	payload := []byte(`{"plexUrl":"http://plex.local:32400","plexToken":"very-secret","plexUser":"Sara","pollIntervalSeconds":5,"allowInsecureHttp":true}`)
 	request, err := http.NewRequest(http.MethodPost, server.URL+"/api/settings", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://"+listenAddr)
+	request.Header.Set(controlTokenHeader, "test-control-token")
+	request.Host = listenAddr
 	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +112,7 @@ func TestSettingsPersistAndTokenIsNotReturned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.snapshot(); got.PlexToken != "very-secret" || got.PlexUser != "Sara" || got.PollIntervalSeconds != 5 {
+	if got := reloaded.snapshot(); got.PlexToken != "very-secret" || got.PlexUser != "Sara" || got.PollIntervalSeconds != 5 || !got.AllowInsecureHTTP {
 		t.Fatalf("unexpected persisted settings: %+v", got)
 	}
 
@@ -132,12 +136,197 @@ func TestSettingsPersistAndTokenIsNotReturned(t *testing.T) {
 	}
 }
 
+func TestCanonicalHostRejectsDNSRebindingAuthority(t *testing.T) {
+	store := &settingsStore{}
+	handler := appHandler(store, func() {}, "test-control-token")
+	request := httptest.NewRequest(http.MethodGet, "http://attacker.example:7070/api/control-token", nil)
+	request.Host = "attacker.example:7070"
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("rebound host status = %d", response.Code)
+	}
+}
+
+func TestStateChangesRequireCanonicalOriginAndControlToken(t *testing.T) {
+	store := &settingsStore{settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "secret", PollIntervalSeconds: 3}}
+	handler := appHandler(store, func() {}, "test-control-token")
+	tests := []struct {
+		name   string
+		origin string
+		token  string
+		want   int
+	}{
+		{name: "missing origin", token: "test-control-token", want: http.StatusForbidden},
+		{name: "rebound origin", origin: "http://attacker.example:7070", token: "test-control-token", want: http.StatusForbidden},
+		{name: "missing token", origin: "http://" + listenAddr, want: http.StatusForbidden},
+		{name: "wrong token", origin: "http://" + listenAddr, token: "wrong", want: http.StatusForbidden},
+		{name: "authorized", origin: "http://" + listenAddr, token: "test-control-token", want: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "http://"+listenAddr+"/api/settings", strings.NewReader("{}"))
+			request.Host = listenAddr
+			if test.origin != "" {
+				request.Header.Set("Origin", test.origin)
+			}
+			if test.token != "" {
+				request.Header.Set(controlTokenHeader, test.token)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.want {
+				t.Fatalf("status = %d, want %d", response.Code, test.want)
+			}
+		})
+	}
+}
+
+func TestSettingsRequireTokenWhenPlexOriginChanges(t *testing.T) {
+	store := &settingsStore{settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "saved-secret", PollIntervalSeconds: 3}}
+	handler := appHandler(store, func() {}, "test-control-token")
+	payload := `{"plexUrl":"https://attacker.example","plexToken":"","pollIntervalSeconds":3}`
+	request := httptest.NewRequest(http.MethodPost, "http://"+listenAddr+"/api/settings", strings.NewReader(payload))
+	request.Host = listenAddr
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://"+listenAddr)
+	request.Header.Set(controlTokenHeader, "test-control-token")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if got := store.snapshot(); got.PlexURL != "https://plex.example" || got.PlexToken != "saved-secret" {
+		t.Fatalf("settings changed after rejected request: %+v", got)
+	}
+}
+
+func TestSettingsPreserveTokenForUnchangedPlexOrigin(t *testing.T) {
+	store := &settingsStore{path: filepath.Join(t.TempDir(), "config.json"), settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "saved-secret", PollIntervalSeconds: 3}}
+	handler := appHandler(store, func() {}, "test-control-token")
+	payload := `{"plexUrl":"https://PLEX.example:443/library","plexToken":"","pollIntervalSeconds":5}`
+	request := httptest.NewRequest(http.MethodPost, "http://"+listenAddr+"/api/settings", strings.NewReader(payload))
+	request.Host = listenAddr
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://"+listenAddr)
+	request.Header.Set(controlTokenHeader, "test-control-token")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := store.snapshot(); got.PlexToken != "saved-secret" || got.PollIntervalSeconds != 5 {
+		t.Fatalf("settings = %+v", got)
+	}
+}
+
+func TestValidateSettingsRequiresExplicitRemoteHTTPOptIn(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		allow   bool
+		wantErr bool
+	}{
+		{name: "remote HTTP rejected", url: "http://192.168.1.100:32400", wantErr: true},
+		{name: "remote HTTP explicit opt in", url: "http://192.168.1.100:32400", allow: true},
+		{name: "loopback HTTP", url: "http://127.0.0.1:32400"},
+		{name: "localhost HTTP", url: "http://localhost:32400"},
+		{name: "remote HTTPS", url: "https://plex.example"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := validateSettings(savedSettings{PlexURL: test.url, PlexToken: "secret", PollIntervalSeconds: 3, AllowInsecureHTTP: test.allow})
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateSettings() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestPlexClientRejectsCrossOriginRedirectBeforeSendingToken(t *testing.T) {
+	targetCalled := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetCalled = true
+		if token := r.Header.Get("X-Plex-Token"); token != "" {
+			t.Errorf("redirect target received token %q", token)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Redirect(w, &http.Request{}, target.URL, http.StatusFound)
+	}))
+	defer source.Close()
+
+	client, err := clientFromSettings(savedSettings{PlexURL: source.URL, PlexToken: "secret", PollIntervalSeconds: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.request(context.Background(), "/status/sessions")
+	if response != nil {
+		response.Body.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "configured origin") {
+		t.Fatalf("redirect error = %v", err)
+	}
+	if targetCalled {
+		t.Fatal("cross-origin redirect target was contacted")
+	}
+}
+
+func TestPlexClientAllowsSameOriginRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/first" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		if got := r.Header.Get("X-Plex-Token"); got != "secret" {
+			t.Errorf("token header = %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client, err := clientFromSettings(savedSettings{PlexURL: server.URL, PlexToken: "secret", PollIntervalSeconds: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.request(context.Background(), "/first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+}
+
+func TestSecurityHeadersDenyFraming(t *testing.T) {
+	handler := appHandler(&settingsStore{}, func() {}, "test-control-token")
+	request := httptest.NewRequest(http.MethodGet, "http://"+listenAddr+"/web/setup.html", nil)
+	request.Host = listenAddr
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if got := response.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("X-Frame-Options = %q", got)
+	}
+	if got := response.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Fatalf("Content-Security-Policy = %q", got)
+	}
+}
+
 func TestSettingsRejectCrossOriginWrite(t *testing.T) {
 	store, err := newSettingsStore(filepath.Join(t.TempDir(), "config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(routes(store, func() {}))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
 	defer server.Close()
 	request, _ := http.NewRequest(http.MethodPost, server.URL+"/api/settings", bytes.NewReader([]byte(`{}`)))
 	request.Header.Set("Origin", "https://example.com")

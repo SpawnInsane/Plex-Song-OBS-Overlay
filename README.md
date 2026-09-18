@@ -20,7 +20,7 @@ The application must be running while you stream. Keep the control window open w
 
 ## Plex settings
 
-- **Plex server URL:** Usually `http://PLEX-COMPUTER-IP:32400`, such as `http://192.168.1.100:32400`.
+- **Plex server URL:** Prefer an HTTPS address for Plex. HTTP is accepted automatically only for Plex on this computer. A trusted LAN server such as `http://192.168.1.100:32400` requires selecting **Allow insecure HTTP** after acknowledging that the token and playback traffic will not be encrypted.
 - **Plex token:** Follow Plex's guide to [find your authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/). Treat this token like a password.
 - **Plex username:** The user whose playback should appear. Leave this blank to show the first active music session from any user.
 - **Refresh interval:** How frequently the overlay asks Plex for an update. Three seconds is recommended.
@@ -36,7 +36,9 @@ The card stays transparent and hidden when the selected user is not playing musi
 
 ## Security notes
 
-Plex Song OBS Overlay listens only on `127.0.0.1`, so other computers cannot open its settings page. The Plex token is saved locally in the current Windows user's configuration file. Do not share that file or commit it to source control.
+Plex Song OBS Overlay listens only on `127.0.0.1`, rejects other host names, and authorizes control-window changes with a temporary token created each time the application starts. The Plex token is saved locally in the current Windows user's configuration file. Do not share that file or commit it to source control.
+
+Use HTTPS for Plex whenever possible. Enabling insecure HTTP for a remote or LAN server allows devices on that network path to observe or alter the Plex token and playback traffic.
 
 ## Build from source
 
