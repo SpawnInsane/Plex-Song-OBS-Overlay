@@ -20,8 +20,14 @@
     <section class="panel">
       <form id="settings-form">
         <label for="plex-url">Plex server URL</label>
-        <input id="plex-url" name="plexUrl" type="url" placeholder="http://192.168.1.100:32400" required spellcheck="false">
-        <p class="hint">Usually your Plex computer's local IP address followed by port 32400.</p>
+        <input id="plex-url" name="plexUrl" type="url" placeholder="https://your-plex-server.example" required spellcheck="false">
+        <p class="hint">HTTPS is required unless Plex runs on this computer or you explicitly allow insecure LAN HTTP below.</p>
+
+        <label class="checkbox-row" for="allow-insecure-http">
+          <input id="allow-insecure-http" name="allowInsecureHttp" type="checkbox">
+          <span>Allow insecure HTTP to a trusted LAN Plex server</span>
+        </label>
+        <p class="hint warning">HTTP exposes your Plex token and playback traffic to devices that can observe or alter your network connection.</p>
 
         <label for="plex-token">Plex token</label>
         <div class="token-row">

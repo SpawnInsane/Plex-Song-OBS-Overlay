@@ -4,7 +4,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -21,7 +24,10 @@ import (
 	"time"
 )
 
-const listenAddr = "127.0.0.1:7070"
+const (
+	listenAddr         = "127.0.0.1:7070"
+	controlTokenHeader = "X-Plex-Overlay-Control-Token"
+)
 
 const (
 	productName       = "Plex Song OBS Overlay"
@@ -39,6 +45,7 @@ type savedSettings struct {
 	PlexToken           string `json:"plexToken"`
 	PlexUser            string `json:"plexUser"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
+	AllowInsecureHTTP   bool   `json:"allowInsecureHttp,omitempty"`
 }
 
 type settingsStore struct {
@@ -95,6 +102,7 @@ type publicSettings struct {
 	PlexURL             string `json:"plexUrl"`
 	PlexUser            string `json:"plexUser"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
+	AllowInsecureHTTP   bool   `json:"allowInsecureHttp"`
 	TokenConfigured     bool   `json:"tokenConfigured"`
 	ConfigPath          string `json:"configPath"`
 	Version             string `json:"version"`
@@ -192,6 +200,9 @@ func validateSettings(settings savedSettings) (*url.URL, error) {
 	if strings.TrimSpace(settings.PlexToken) == "" {
 		return nil, errors.New("enter a Plex token")
 	}
+	if base.Scheme == "http" && !isLoopbackHost(base.Hostname()) && !settings.AllowInsecureHTTP {
+		return nil, errors.New("use HTTPS for a remote Plex server or explicitly allow insecure HTTP")
+	}
 	if settings.PollIntervalSeconds < 1 || settings.PollIntervalSeconds > 60 {
 		return nil, errors.New("refresh interval must be between 1 and 60 seconds")
 	}
@@ -201,12 +212,48 @@ func validateSettings(settings savedSettings) (*url.URL, error) {
 	return base, nil
 }
 
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func normalizedOrigin(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		switch strings.ToLower(u.Scheme) {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		}
+	}
+	return strings.ToLower(u.Scheme) + "://" + net.JoinHostPort(strings.ToLower(u.Hostname()), port)
+}
+
+func samePlexOrigin(a, b *url.URL) bool {
+	return normalizedOrigin(a) == normalizedOrigin(b)
+}
+
 func clientFromSettings(settings savedSettings) (*plexClient, error) {
 	base, err := validateSettings(settings)
 	if err != nil {
 		return nil, err
 	}
-	return &plexClient{base: base, token: settings.PlexToken, client: &http.Client{Timeout: 8 * time.Second}}, nil
+	client := &http.Client{Timeout: 8 * time.Second}
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("too many Plex redirects")
+		}
+		if !samePlexOrigin(base, req.URL) {
+			req.Header.Del("X-Plex-Token")
+			return errors.New("Plex redirect left the configured origin")
+		}
+		return nil
+	}
+	return &plexClient{base: base, token: settings.PlexToken, client: client}, nil
 }
 
 func (p *plexClient) request(ctx context.Context, path string) (*http.Response, error) {
@@ -274,6 +321,11 @@ func main() {
 		slog.Error("configuration migration error", "error", err)
 		return
 	}
+	controlToken, err := newControlToken()
+	if err != nil {
+		slog.Error("control authorization error", "error", err)
+		return
+	}
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
@@ -292,8 +344,8 @@ func main() {
 
 	shutdown := make(chan struct{})
 	var shutdownOnce sync.Once
-	mux := routes(store, func() { shutdownOnce.Do(func() { close(shutdown) }) })
-	server := &http.Server{Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	handler := appHandler(store, func() { shutdownOnce.Do(func() { close(shutdown) }) }, controlToken)
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server stopped", "error", err)
@@ -312,24 +364,41 @@ func main() {
 	_ = server.Shutdown(ctx)
 }
 
-func routes(store *settingsStore, stop func()) *http.ServeMux {
+func newControlToken() (string, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", fmt.Errorf("generate control token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
+}
+
+func appHandler(store *settingsStore, stop func(), controlToken string) http.Handler {
+	return securityHeaders(canonicalHost(routes(store, stop, controlToken)))
+}
+
+func routes(store *settingsStore, stop func(), controlToken string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/web/setup.html", http.StatusTemporaryRedirect)
 	})
 	mux.Handle("GET /web/", noCache(http.FileServer(http.FS(webFiles))))
+	mux.HandleFunc("GET /api/control-token", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, map[string]string{"controlToken": controlToken})
+	})
 	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, _ *http.Request) {
 		current := store.snapshot()
 		writeJSON(w, http.StatusOK, publicSettings{
 			PlexURL: current.PlexURL, PlexUser: current.PlexUser,
 			PollIntervalSeconds: current.PollIntervalSeconds,
+			AllowInsecureHTTP:   current.AllowInsecureHTTP,
 			TokenConfigured:     strings.TrimSpace(current.PlexToken) != "", ConfigPath: store.path,
 			Version: applicationVersion(),
 		})
 	})
 	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
-		if !sameOrigin(r) {
-			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+		if !authorizedStateChange(r, controlToken) {
+			http.Error(w, "control authorization rejected", http.StatusForbidden)
 			return
 		}
 		var input savedSettings
@@ -343,7 +412,14 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 		input.PlexUser = strings.TrimSpace(input.PlexUser)
 		input.PlexToken = strings.TrimSpace(input.PlexToken)
 		if input.PlexToken == "" {
-			input.PlexToken = store.snapshot().PlexToken
+			current := store.snapshot()
+			currentURL, currentErr := url.Parse(strings.TrimSpace(current.PlexURL))
+			nextURL, nextErr := url.Parse(input.PlexURL)
+			if currentErr != nil || nextErr != nil || currentURL.Host == "" || nextURL.Host == "" || !samePlexOrigin(currentURL, nextURL) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enter the Plex token again when changing the Plex server"})
+				return
+			}
+			input.PlexToken = current.PlexToken
 		}
 		if _, err := validateSettings(input); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -357,8 +433,8 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 		writeJSON(w, http.StatusOK, map[string]bool{"saved": true})
 	})
 	mux.HandleFunc("POST /api/test-connection", func(w http.ResponseWriter, r *http.Request) {
-		if !sameOrigin(r) {
-			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+		if !authorizedStateChange(r, controlToken) {
+			http.Error(w, "control authorization rejected", http.StatusForbidden)
 			return
 		}
 		client, err := clientFromSettings(store.snapshot())
@@ -438,8 +514,8 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 		_, _ = io.Copy(w, io.LimitReader(resp.Body, 10<<20))
 	})
 	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		if !sameOrigin(r) {
-			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+		if !authorizedStateChange(r, controlToken) {
+			http.Error(w, "control authorization rejected", http.StatusForbidden)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"stopping": true})
@@ -454,9 +530,12 @@ func routes(store *settingsStore, stop func()) *http.ServeMux {
 	return mux
 }
 
-func sameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	return origin == "" || origin == "http://"+r.Host || origin == "https://"+r.Host
+func authorizedStateChange(r *http.Request, controlToken string) bool {
+	if r.Host != listenAddr || r.Header.Get("Origin") != "http://"+listenAddr {
+		return false
+	}
+	provided := r.Header.Get(controlTokenHeader)
+	return len(provided) == len(controlToken) && subtle.ConstantTimeCompare([]byte(provided), []byte(controlToken)) == 1
 }
 
 func serverAlreadyRunning() bool {
@@ -509,11 +588,22 @@ func noCache(next http.Handler) http.Handler {
 	})
 }
 
+func canonicalHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != listenAddr {
+			http.Error(w, "invalid host", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }
