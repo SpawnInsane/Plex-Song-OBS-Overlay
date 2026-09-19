@@ -30,7 +30,6 @@ button:disabled { opacity: .55; cursor: wait; }
 .message.success { color: #73d89a; }
 .message.error { color: #ff8d8d; }
 .overlay-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.update-notes { max-height: 190px; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #292c33; border-radius: 12px; color: #a9acb5; background: #16181d; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow: auto; }
 code { display: block; margin-top: 9px; color: #e7e8eb; overflow-wrap: anywhere; }
 .compact { flex: 0 0 auto; margin: 0; }
 footer { display: flex; justify-content: space-between; gap: 16px; padding: 17px 5px; color: #686c76; font-size: 11px; }

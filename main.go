@@ -46,7 +46,6 @@ type savedSettings struct {
 	PlexUser            string `json:"plexUser"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
 	AllowInsecureHTTP   bool   `json:"allowInsecureHttp,omitempty"`
-	IncludePrereleases  bool   `json:"includePrereleases,omitempty"`
 }
 
 type settingsStore struct {
@@ -104,7 +103,6 @@ type publicSettings struct {
 	PlexUser            string `json:"plexUser"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
 	AllowInsecureHTTP   bool   `json:"allowInsecureHttp"`
-	IncludePrereleases  bool   `json:"includePrereleases"`
 	TokenConfigured     bool   `json:"tokenConfigured"`
 	ConfigPath          string `json:"configPath"`
 	Version             string `json:"version"`
@@ -304,7 +302,6 @@ func (p *plexClient) currentTrack(ctx context.Context, username string) (track, 
 }
 
 func main() {
-	cleanupPreviousUpdate()
 	path, err := configFilePath()
 	if err != nil {
 		slog.Error("configuration error", "error", err)
@@ -347,23 +344,13 @@ func main() {
 
 	shutdown := make(chan struct{})
 	var shutdownOnce sync.Once
-	updates := newUpdateManager(store)
-	handler := appHandler(store, func() { shutdownOnce.Do(func() { close(shutdown) }) }, controlToken, updates)
+	handler := appHandler(store, func() { shutdownOnce.Do(func() { close(shutdown) }) }, controlToken)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server stopped", "error", err)
 		}
 		shutdownOnce.Do(func() { close(shutdown) })
-	}()
-
-	// Check for updates in the background so a slow or offline GitHub never delays the window.
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		if _, err := updates.check(ctx); err != nil {
-			slog.Warn("update check failed", "error", err)
-		}
 	}()
 
 	slog.Info(productName+" is ready", "settings", "http://"+listenAddr+"/", "overlay", "http://"+listenAddr+"/web/overlay.html")
@@ -375,14 +362,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)
-
-	// The port is released now, so a relaunched instance starts its own server
-	// instead of attaching to this one.
-	if staged, ok := updates.takeRestart(); ok {
-		if err := applyUpdate(staged); err != nil {
-			slog.Error("could not install the update", "error", err)
-		}
-	}
 }
 
 func newControlToken() (string, error) {
@@ -393,11 +372,11 @@ func newControlToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(value), nil
 }
 
-func appHandler(store *settingsStore, stop func(), controlToken string, updates *updateManager) http.Handler {
-	return securityHeaders(canonicalHost(routes(store, stop, controlToken, updates)))
+func appHandler(store *settingsStore, stop func(), controlToken string) http.Handler {
+	return securityHeaders(canonicalHost(routes(store, stop, controlToken)))
 }
 
-func routes(store *settingsStore, stop func(), controlToken string, updates *updateManager) *http.ServeMux {
+func routes(store *settingsStore, stop func(), controlToken string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/web/setup.html", http.StatusTemporaryRedirect)
@@ -413,7 +392,6 @@ func routes(store *settingsStore, stop func(), controlToken string, updates *upd
 			PlexURL: current.PlexURL, PlexUser: current.PlexUser,
 			PollIntervalSeconds: current.PollIntervalSeconds,
 			AllowInsecureHTTP:   current.AllowInsecureHTTP,
-			IncludePrereleases:  current.IncludePrereleases,
 			TokenConfigured:     strings.TrimSpace(current.PlexToken) != "", ConfigPath: store.path,
 			Version: applicationVersion(),
 		})
@@ -534,54 +512,6 @@ func routes(store *settingsStore, stop func(), controlToken string, updates *upd
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.Header().Set("Cache-Control", "private, max-age=300")
 		_, _ = io.Copy(w, io.LimitReader(resp.Body, 10<<20))
-	})
-	mux.HandleFunc("GET /api/update/status", func(w http.ResponseWriter, _ *http.Request) {
-		if updates == nil {
-			writeJSON(w, http.StatusOK, updateStatus{updateInfo: updateInfo{Current: applicationVersion()}})
-			return
-		}
-		writeJSON(w, http.StatusOK, updates.status())
-	})
-	mux.HandleFunc("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) {
-		if !authorizedStateChange(r, controlToken) {
-			http.Error(w, "control authorization rejected", http.StatusForbidden)
-			return
-		}
-		if updates == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "update checks are unavailable"})
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-		defer cancel()
-		info, err := updates.check(ctx)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not check for updates: " + err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, info)
-	})
-	mux.HandleFunc("POST /api/update/apply", func(w http.ResponseWriter, r *http.Request) {
-		if !authorizedStateChange(r, controlToken) {
-			http.Error(w, "control authorization rejected", http.StatusForbidden)
-			return
-		}
-		if updates == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "updates are unavailable"})
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-		defer cancel()
-		staged, err := updates.stage(ctx)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		updates.requestRestart(staged)
-		writeJSON(w, http.StatusOK, map[string]bool{"restarting": true})
-		go func() {
-			time.Sleep(150 * time.Millisecond)
-			stop()
-		}()
 	})
 	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		if !authorizedStateChange(r, controlToken) {
