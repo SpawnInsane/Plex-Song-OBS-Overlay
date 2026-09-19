@@ -1,4 +1,4 @@
 # Release notes
 
-- Prevented maintenance-only chore commits and pull requests from changing the application version or publishing a release.
-- Added guided bug-report and feature-request forms to help contributors provide actionable details.
+- Hardened the local control window against DNS rebinding and clickjacking, and require a fresh Plex token when changing servers.
+- Protected Plex credentials with HTTPS-first setup, redirect confinement, and an explicit warning before insecure LAN HTTP is allowed.
