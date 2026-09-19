@@ -61,7 +61,8 @@ form.addEventListener('submit', async (event) => {
         plexToken: plexToken.value,
         plexUser: plexUser.value,
         pollIntervalSeconds: Number(pollInterval.value),
-        allowInsecureHttp: allowInsecureHTTP.checked
+        allowInsecureHttp: allowInsecureHTTP.checked,
+        includePrereleases: includePrereleases.checked
       })
     });
     const result = await response.json();
