@@ -24,6 +24,7 @@ a { color: #efb638; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 17px; border: 1px solid #e5a00d; border-radius: 10px; color: #171109; background: #e5a00d; font-family: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
 button:hover, .button:hover { filter: brightness(1.08); }
 button:disabled { opacity: .55; cursor: wait; }
+[hidden] { display: none !important; }
 .secondary { border-color: #3a3e48; color: #e8e9ed; background: #22252c; }
 .small { min-width: 70px; padding: 0 10px; }
 .message { min-height: 20px; margin-top: 14px; color: #a9acb5; font-size: 14px; }

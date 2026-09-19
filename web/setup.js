@@ -92,10 +92,10 @@ form.addEventListener('submit', async (event) => {
       body: JSON.stringify({
         plexUrl: plexURL.value,
         plexToken: plexToken.value,
-        plexUser: plexUser.value,,
-        includePrereleases: includePrereleases.checked
+        plexUser: plexUser.value,
         pollIntervalSeconds: Number(pollInterval.value),
-        allowInsecureHttp: allowInsecureHTTP.checked
+        allowInsecureHttp: allowInsecureHTTP.checked,
+        includePrereleases: includePrereleases.checked
       })
     });
     const result = await response.json();
