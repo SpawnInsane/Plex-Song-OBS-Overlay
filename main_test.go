@@ -49,7 +49,7 @@ func TestNowPlayingIncludesStableTrackID(t *testing.T) {
 	defer plex.Close()
 
 	store := &settingsStore{settings: savedSettings{PlexURL: plex.URL, PlexToken: "secret", PlexUser: "Sara", PollIntervalSeconds: 3}}
-	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token", nil))
 	defer server.Close()
 	response, err := server.Client().Get(server.URL + "/api/now-playing")
 	if err != nil {
@@ -87,7 +87,7 @@ func TestSettingsPersistAndTokenIsNotReturned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token", nil))
 	defer server.Close()
 
 	payload := []byte(`{"plexUrl":"http://plex.local:32400","plexToken":"very-secret","plexUser":"Sara","pollIntervalSeconds":5,"allowInsecureHttp":true}`)
@@ -138,7 +138,7 @@ func TestSettingsPersistAndTokenIsNotReturned(t *testing.T) {
 
 func TestCanonicalHostRejectsDNSRebindingAuthority(t *testing.T) {
 	store := &settingsStore{}
-	handler := appHandler(store, func() {}, "test-control-token")
+	handler := appHandler(store, func() {}, "test-control-token", nil)
 	request := httptest.NewRequest(http.MethodGet, "http://attacker.example:7070/api/control-token", nil)
 	request.Host = "attacker.example:7070"
 	response := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestCanonicalHostRejectsDNSRebindingAuthority(t *testing.T) {
 
 func TestStateChangesRequireCanonicalOriginAndControlToken(t *testing.T) {
 	store := &settingsStore{settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "secret", PollIntervalSeconds: 3}}
-	handler := appHandler(store, func() {}, "test-control-token")
+	handler := appHandler(store, func() {}, "test-control-token", nil)
 	tests := []struct {
 		name   string
 		origin string
@@ -186,7 +186,7 @@ func TestStateChangesRequireCanonicalOriginAndControlToken(t *testing.T) {
 
 func TestSettingsRequireTokenWhenPlexOriginChanges(t *testing.T) {
 	store := &settingsStore{settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "saved-secret", PollIntervalSeconds: 3}}
-	handler := appHandler(store, func() {}, "test-control-token")
+	handler := appHandler(store, func() {}, "test-control-token", nil)
 	payload := `{"plexUrl":"https://attacker.example","plexToken":"","pollIntervalSeconds":3}`
 	request := httptest.NewRequest(http.MethodPost, "http://"+listenAddr+"/api/settings", strings.NewReader(payload))
 	request.Host = listenAddr
@@ -207,7 +207,7 @@ func TestSettingsRequireTokenWhenPlexOriginChanges(t *testing.T) {
 
 func TestSettingsPreserveTokenForUnchangedPlexOrigin(t *testing.T) {
 	store := &settingsStore{path: filepath.Join(t.TempDir(), "config.json"), settings: savedSettings{PlexURL: "https://plex.example", PlexToken: "saved-secret", PollIntervalSeconds: 3}}
-	handler := appHandler(store, func() {}, "test-control-token")
+	handler := appHandler(store, func() {}, "test-control-token", nil)
 	payload := `{"plexUrl":"https://PLEX.example:443/library","plexToken":"","pollIntervalSeconds":5}`
 	request := httptest.NewRequest(http.MethodPost, "http://"+listenAddr+"/api/settings", strings.NewReader(payload))
 	request.Host = listenAddr
@@ -307,7 +307,7 @@ func TestPlexClientAllowsSameOriginRedirect(t *testing.T) {
 }
 
 func TestSecurityHeadersDenyFraming(t *testing.T) {
-	handler := appHandler(&settingsStore{}, func() {}, "test-control-token")
+	handler := appHandler(&settingsStore{}, func() {}, "test-control-token", nil)
 	request := httptest.NewRequest(http.MethodGet, "http://"+listenAddr+"/web/setup.html", nil)
 	request.Host = listenAddr
 	response := httptest.NewRecorder()
@@ -326,7 +326,7 @@ func TestSettingsRejectCrossOriginWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(routes(store, func() {}, "test-control-token"))
+	server := httptest.NewServer(routes(store, func() {}, "test-control-token", nil))
 	defer server.Close()
 	request, _ := http.NewRequest(http.MethodPost, server.URL+"/api/settings", bytes.NewReader([]byte(`{}`)))
 	request.Header.Set("Origin", "https://example.com")

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"runtime"
 )
@@ -24,3 +25,11 @@ func runControlWindow(address string, shutdown <-chan struct{}) error {
 }
 
 func showControlWindowError(error) {}
+
+// applyUpdate is only implemented on Windows, where the application ships as a
+// single executable.
+func applyUpdate(string) error {
+	return errors.New("installing updates is only supported on Windows")
+}
+
+func cleanupPreviousUpdate() {}
