@@ -34,6 +34,16 @@ The application must be running while you stream. Keep the control window open w
 
 The card stays transparent and hidden when the selected user is not playing music. It displays album artwork, title, artist, album, smoothly animated progress, current and total track times, and paused status. Song changes and playback seeks reset the progress position automatically.
 
+## Updates
+
+Plex Song OBS Overlay checks GitHub for a newer version when it starts and shows the result in the **Updates** section of the control window. Select **Check for updates** to check again at any time.
+
+When a newer version is available, select **Install and restart**. The application downloads the new executable, verifies it against the SHA-256 checksum published with the release, replaces itself, and restarts. Your saved settings are kept. The overlay is unavailable until the application finishes restarting, so install updates when you are not live.
+
+Select **Include pre-release (RC) builds** to also be offered release candidates published from the development branch. Pre-release builds may be less stable than a full release. This preference is saved with your other settings.
+
+Updates are never installed automatically. If the update check cannot reach GitHub, the application keeps running normally and reports the problem in the control window.
+
 ## Security notes
 
 Plex Song OBS Overlay listens only on `127.0.0.1`, rejects other host names, and authorizes control-window changes with a temporary token created each time the application starts. The Plex token is saved locally in the current Windows user's configuration file. Do not share that file or commit it to source control.
