@@ -4,9 +4,7 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"unsafe"
@@ -69,39 +67,4 @@ func showControlWindowError(err error) {
 	message, _ := windows.UTF16PtrFromString("The desktop control window could not open. Make sure the Microsoft Edge WebView2 Runtime is installed, then try again.\n\n" + err.Error())
 	title, _ := windows.UTF16PtrFromString(productName)
 	_, _, _ = messageBoxW.Call(0, uintptr(unsafe.Pointer(message)), uintptr(unsafe.Pointer(title)), messageBoxOK|messageBoxIconError)
-}
-
-// applyUpdate replaces the running executable with a verified download and
-// relaunches it. Windows keeps the running image locked, so the current file is
-// renamed aside first; renaming is permitted where overwriting is not.
-func applyUpdate(staged string) error {
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("locate the running application: %w", err)
-	}
-	previous := executable + ".old"
-	_ = os.Remove(previous)
-	if err := os.Rename(executable, previous); err != nil {
-		return fmt.Errorf("move the running application aside: %w", err)
-	}
-	if err := os.Rename(staged, executable); err != nil {
-		_ = os.Rename(previous, executable)
-		return fmt.Errorf("install the downloaded update: %w", err)
-	}
-	command := exec.Command(executable)
-	command.Dir = filepath.Dir(executable)
-	if err := command.Start(); err != nil {
-		return fmt.Errorf("restart the application: %w", err)
-	}
-	return nil
-}
-
-// cleanupPreviousUpdate removes the renamed previous executable left behind by
-// an earlier update. It is best effort because the file may still be locked.
-func cleanupPreviousUpdate() {
-	executable, err := os.Executable()
-	if err != nil {
-		return
-	}
-	_ = os.Remove(executable + ".old")
 }

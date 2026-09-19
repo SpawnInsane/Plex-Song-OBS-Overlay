@@ -71,24 +71,6 @@
       </div>
     </section>
 
-    <section class="panel">
-      <p class="eyebrow">UPDATES</p>
-      <p class="hint">Plex Song OBS Overlay checks GitHub for a newer version when it starts. Installing an update restarts the application.</p>
-
-      <label class="checkbox-row" for="include-prereleases">
-        <input id="include-prereleases" name="includePrereleases" type="checkbox">
-        <span>Include pre-release (RC) builds</span>
-      </label>
-      <p class="hint">Pre-release builds are published from the development branch and may be less stable than a full release.</p>
-
-      <div class="actions">
-        <button id="check-updates" class="secondary" type="button">Check for updates</button>
-        <button id="install-update" type="button" hidden>Install and restart</button>
-      </div>
-      <p id="update-message" class="message" role="status" aria-live="polite"></p>
-      <pre id="update-notes" class="update-notes" hidden></pre>
-    </section>
-
     <footer>
       <span><span id="app-version"></span> · <span id="save-location"></span></span>
       <button id="stop-server" class="text-button" type="button">Stop application</button>
