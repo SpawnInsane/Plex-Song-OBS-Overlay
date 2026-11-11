@@ -1,0 +1,48 @@
+# Maintainer: SpawnInsane <spawninsane@gmail.com>
+pkgname=plex-song-obs-overlay-git
+pkgver=0.2.1
+pkgrel=1
+pkgdesc='Display the current Plex song as a transparent OBS overlay'
+arch=('x86_64' 'aarch64')
+url='https://github.com/SpawnInsane/Plex-Song-OBS-Overlay'
+license=('GPL-3.0-only')
+depends=('ca-certificates' 'xdg-utils')
+makedepends=('git' 'go>=1.26' 'make')
+optdepends=('obs-studio: display the overlay' 'xdg-desktop-portal: open the control page on Wayland')
+provides=('plex-song-obs-overlay')
+conflicts=('plex-song-obs-overlay')
+source=("plex-song-obs-overlay::git+${url}.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/plex-song-obs-overlay"
+  local version
+  version=$(sed -n 's/.*"version": *"v\([^"]*\)".*/\1/p' version.json)
+  printf '%s.r%s.g%s' "${version//-/.}" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd "$srcdir/plex-song-obs-overlay"
+  export GOPATH="$srcdir/go"
+  export GOTOOLCHAIN=local
+  go mod download
+}
+
+build() {
+  cd "$srcdir/plex-song-obs-overlay"
+  export GOPATH="$srcdir/go"
+  export GOTOOLCHAIN=local
+  make build
+}
+
+check() {
+  cd "$srcdir/plex-song-obs-overlay"
+  export GOPATH="$srcdir/go"
+  export GOTOOLCHAIN=local
+  go test ./...
+}
+
+package() {
+  cd "$srcdir/plex-song-obs-overlay"
+  make install DESTDIR="$pkgdir" PREFIX=/usr
+}

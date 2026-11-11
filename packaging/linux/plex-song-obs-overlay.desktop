@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Plex Song OBS Overlay
+Comment=Show your current Plex song in OBS
+Exec=plex-song-obs-overlay
+Icon=plex-song-obs-overlay
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=Plex;OBS;Music;Streaming;
+StartupNotify=false

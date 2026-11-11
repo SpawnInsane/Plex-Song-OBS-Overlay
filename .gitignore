@@ -5,3 +5,10 @@ PlexSongOBSOverlay.exe
 Plex-Song-OBS-Overlay.exe
 .gocache/
 .gomodcache/
+build/
+dist/
+__pycache__/
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.pkg.tar.*
+packaging/aur/plex-song-obs-overlay/
