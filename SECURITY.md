@@ -18,7 +18,7 @@ On Linux, the control page opens through `xdg-open` in the user's default browse
 
 The Plex token is sensitive and is stored in the current user's configuration directory. The token must never be returned by the settings API, included in the overlay URL, logged, or committed to this repository. Anyone with access to the user's account and configuration files may be able to read it.
 
-State-changing browser requests must remain same-origin. Plex responses and artwork are untrusted remote input and must remain size-bounded. The artwork proxy must only contact the configured Plex origin and accept image responses.
+The loopback server accepts only its canonical `127.0.0.1:7070` authority. State-changing browser requests must use the canonical same origin and the unpredictable per-process control token. Control pages must deny framing so that another site cannot disguise settings or shutdown actions.
 
 GitHub release workflows may write tags, releases, release artifacts, version metadata, and release-note resets. External actions used by privileged workflows must remain pinned to reviewed commit digests, and write credentials must be limited to the jobs that require them. Automated commits are signed with a dedicated SSH key stored as the `RELEASE_SIGNING_PRIVATE_KEY` Actions secret. That key must be registered only as a GitHub signing key, must not be reused for authentication, and must be rotated immediately if workflow access or the secret is compromised.
 

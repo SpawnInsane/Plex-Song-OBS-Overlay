@@ -87,7 +87,7 @@ The application must be running while you stream. On Windows, keep the primary c
 
 ## Plex settings
 
-- **Plex server URL:** Usually `http://PLEX-COMPUTER-IP:32400`, such as `http://192.168.1.100:32400`.
+- **Plex server URL:** Prefer an HTTPS address for Plex. HTTP is accepted automatically only for Plex on this computer. A trusted LAN server such as `http://192.168.1.100:32400` requires selecting **Allow insecure HTTP** after acknowledging that the token and playback traffic will not be encrypted.
 - **Plex token:** Follow Plex's guide to [find your authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/). Treat this token like a password.
 - **Plex username:** The user whose playback should appear. Leave this blank to show the first active music session from any user.
 - **Refresh interval:** How frequently the overlay asks Plex for an update. Three seconds is recommended.
