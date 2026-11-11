@@ -59,6 +59,13 @@ jobs:
           mkdir dist
           go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/PlexSongOBSOverlay.exe .
           sha256sum dist/PlexSongOBSOverlay.exe > dist/PlexSongOBSOverlay.exe.sha256
+      - name: Build Linux release packages
+        run: python3 scripts/build-linux-packages.py
+      - name: Archive release source
+        run: |
+          git archive --format=tar.gz --prefix=plex-song-obs-overlay-source/ --output=dist/plex-song-obs-overlay-source.tar.gz HEAD
+          cd dist
+          sha256sum plex-song-obs-overlay-source.tar.gz > plex-song-obs-overlay-source.tar.gz.sha256
       - name: Create GitHub release
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
@@ -70,6 +77,17 @@ jobs:
           generateReleaseNotesPreviousTag: ${{ needs.calculate.outputs.previous_tag }}
           artifacts: dist/*
           makeLatest: true
+
+  publish-apt:
+    needs: release
+    if: vars.PUBLISH_APT_REPOSITORY == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/publish-apt.yml
+    secrets:
+      APT_SIGNING_PRIVATE_KEY: ${{ secrets.APT_SIGNING_PRIVATE_KEY }}
 
   reset-release-notes:
     needs: release

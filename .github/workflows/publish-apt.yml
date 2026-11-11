@@ -1,0 +1,61 @@
+name: Publish APT repository
+
+on:
+  workflow_call:
+    secrets:
+      APT_SIGNING_PRIVATE_KEY:
+        required: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apt-pages
+  cancel-in-progress: false
+
+jobs:
+  repository:
+    if: github.ref == 'refs/heads/main' && vars.PUBLISH_APT_REPOSITORY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted publishing scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Download the latest stable Debian packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir debs
+          gh release download --pattern 'plex-song-obs-overlay_*.deb' --dir debs
+      - name: Build and sign repository metadata
+        env:
+          APT_SIGNING_PRIVATE_KEY: ${{ secrets.APT_SIGNING_PRIVATE_KEY }}
+          APT_SIGNING_KEY_FINGERPRINT: ${{ vars.APT_SIGNING_KEY_FINGERPRINT }}
+          GNUPGHOME: ${{ runner.temp }}/apt-gnupg
+        run: |
+          set -euo pipefail
+          trap 'gpgconf --kill gpg-agent || true; rm -rf "$GNUPGHOME"' EXIT
+          install -dm700 "$GNUPGHOME"
+          printf '%s' "$APT_SIGNING_PRIVATE_KEY" | gpg --batch --import
+          python3 scripts/build-apt-repository.py --packages debs --output apt-site --signing-key "$APT_SIGNING_KEY_FINGERPRINT"
+      - name: Upload repository for Pages
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: apt-site
+
+  deploy:
+    needs: repository
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy signed APT repository
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

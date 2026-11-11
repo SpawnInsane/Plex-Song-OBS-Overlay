@@ -1,0 +1,21 @@
+pkgbase = plex-song-obs-overlay-git
+	pkgdesc = Display the current Plex song as a transparent OBS overlay
+	pkgver = 0.2.1
+	pkgrel = 1
+	url = https://github.com/SpawnInsane/Plex-Song-OBS-Overlay
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-only
+	makedepends = git
+	makedepends = go>=1.26
+	makedepends = make
+	depends = ca-certificates
+	depends = xdg-utils
+	optdepends = obs-studio: display the overlay
+	optdepends = xdg-desktop-portal: open the control page on Wayland
+	provides = plex-song-obs-overlay
+	conflicts = plex-song-obs-overlay
+	source = plex-song-obs-overlay::git+https://github.com/SpawnInsane/Plex-Song-OBS-Overlay.git#branch=main
+	sha256sums = SKIP
+
+pkgname = plex-song-obs-overlay-git

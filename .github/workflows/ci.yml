@@ -28,6 +28,16 @@ jobs:
         run: node .github/scripts/calculate-release-version.test.cjs
       - name: Run static analysis
         run: go vet ./...
+      - name: Test Linux packaging
+        run: python3 -m unittest discover -s packaging/tests -v
+      - name: Build Linux packages
+        run: python3 scripts/build-linux-packages.py
+      - name: Inspect Debian packages
+        run: |
+          for package in dist/*.deb; do
+            dpkg-deb --info "$package"
+            dpkg-deb --contents "$package"
+          done
       - name: Build Windows application
         env:
           GOOS: windows
